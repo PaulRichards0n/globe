@@ -643,6 +643,14 @@
           <button class="control-button" onclick="refreshFires()">
             <span><span class="icon">🔄</span>Refresh Fires</span>
           </button>
+
+          <button class="control-button" onclick="toggleWeather()">
+            <span><span class="icon">🌤️</span>Weather Stations</span>
+            <span class="badge" id="weather-badge">OFF</span>
+          </button>
+          <button class="control-button" onclick="refreshWeather()">
+            <span><span class="icon">🔄</span>Refresh Weather</span>
+          </button>
         </div>
       </div>
 
@@ -756,6 +764,7 @@
     let airplaneUpdateInterval;
     let hurricaneUpdateInterval;
     let fireUpdateInterval;
+    let weatherUpdateInterval;
     let lastUpdateTime = null;
     let lastAirplaneUpdate = null;
     let lastISSUpdate = null;
@@ -785,6 +794,11 @@
     let showFires = false;
     let fireGroup = null;         // THREE.Group for fire markers
     let fireData = null;          // cache for fire data
+
+    // Weather overlay state (Environment Canada)
+    let showWeather = false;
+    let weatherGroup = null;      // THREE.Group for weather station markers
+    let weatherData = null;       // cache for weather data
 
     let resizeInit = false; // guard
 
@@ -918,6 +932,15 @@
       MODIS: 'https://firms.modaps.eosdis.nasa.gov/wms/c6/',
       VIIRS: 'https://firms.modaps.eosdis.nasa.gov/wms/viirs/',
       LANDSAT: 'https://firms.modaps.eosdis.nasa.gov/wms/landsat/'
+    };
+
+    // Environment Canada Weather Stations (ArcGIS Feature Service)
+    const ENV_CANADA_WEATHER_URL = 'https://services.arcgis.com/zmLUiqh7X11gGV2d/arcgis/rest/services/EnvironmentCanada/FeatureServer/0/query';
+    const ENV_CANADA_WEATHER_PARAMS = {
+      where: '1=1',
+      outFields: '*',
+      f: 'geojson',
+      returnGeometry: true
     };
 
     function init() {
@@ -2117,6 +2140,19 @@
         }
       }
 
+      // Check weather station click
+      if (weatherGroup) {
+        const weatherHits = raycaster.intersectObjects(weatherGroup.children);
+        if (weatherHits.length > 0) {
+          const station = weatherHits[0].object;
+          if (station.userData && station.userData.type === 'weather-station') {
+            showWeatherDetails(station.userData);
+            focusOnWeatherStation(station.userData.lat, station.userData.lng);
+            return;
+          }
+        }
+      }
+
       // Check rocket click
       if (rocketMarker) {
         const rocketHits = raycaster.intersectObjects([rocketMarker]);
@@ -2820,12 +2856,14 @@
         if (issUpdateInterval) clearInterval(issUpdateInterval);
         if (hurricaneUpdateInterval) clearInterval(hurricaneUpdateInterval);
         if (fireUpdateInterval) clearInterval(fireUpdateInterval);
+        if (weatherUpdateInterval) clearInterval(weatherUpdateInterval);
       } else {
         if (autoUpdateEnabled) startAutoUpdate();
         if (showAirplanes) startAirplaneUpdate();
         if (showISS) startISSUpdate();
         if (showHurricanes) startHurricaneUpdate();
         if (showFires) startFireUpdate();
+        if (showWeather) startWeatherUpdate();
       }
     });
 
@@ -4255,6 +4293,271 @@
           console.warn('Fire update failed:', e);
         }
       }, 30 * 60 * 1000);
+    }
+
+    // =========================
+    // ENVIRONMENT CANADA WEATHER
+    // =========================
+
+    async function toggleWeather() {
+      showWeather = !showWeather;
+      const badge = document.getElementById('weather-badge');
+      if (badge) badge.textContent = showWeather ? 'ON' : 'OFF';
+      if (showWeather) { 
+        await ensureWeatherOverlay(); 
+        startWeatherUpdate(); 
+      } else { 
+        clearWeatherOverlay(); 
+        if (weatherUpdateInterval) clearInterval(weatherUpdateInterval); 
+      }
+    }
+
+    async function refreshWeather() {
+      weatherData = null;
+      clearWeatherOverlay();
+      if (showWeather) await ensureWeatherOverlay();
+    }
+
+    async function ensureWeatherOverlay() {
+      if (weatherGroup) return;
+      try {
+        console.log('Loading Environment Canada weather data...');
+        weatherGroup = new THREE.Group();
+        earthGroup.add(weatherGroup);
+        
+        const stationCount = await loadWeatherData();
+        
+        const statusText = document.getElementById('status-text');
+        if (statusText) {
+          if (stationCount > 0) {
+            statusText.textContent = `Weather: ${stationCount} station${stationCount > 1 ? 's' : ''} loaded`;
+          } else {
+            statusText.textContent = 'Weather: No station data available';
+          }
+        }
+        
+      } catch (err) {
+        console.error('Error loading weather data:', err);
+        const badge = document.getElementById('weather-badge');
+        if (badge) badge.textContent = 'OFF';
+        showWeather = false;
+        const statusText = document.getElementById('status-text');
+        if (statusText) statusText.textContent = `Weather error: ${err.message}`;
+      }
+    }
+
+    function clearWeatherOverlay() {
+      if (!weatherGroup) return;
+      weatherGroup.children.forEach(child => disposeObject(child));
+      earthGroup.remove(weatherGroup);
+      weatherGroup = null;
+    }
+
+    async function loadWeatherData() {
+      try {
+        console.log('Fetching weather stations from Environment Canada...');
+        
+        // Build query URL with parameters
+        const params = new URLSearchParams(ENV_CANADA_WEATHER_PARAMS);
+        const url = `${ENV_CANADA_WEATHER_URL}?${params.toString()}`;
+        
+        // Try direct fetch first, then proxy if needed
+        let data;
+        try {
+          const response = await fetch(url);
+          if (response.ok) {
+            data = await response.json();
+          }
+        } catch (error) {
+          console.log('Direct fetch failed, trying proxy...');
+          data = await fetchJsonMaybeProxy(url);
+        }
+        
+        if (!data || !data.features) {
+          throw new Error('No weather station data received');
+        }
+        
+        console.log(`Found ${data.features.length} weather stations`);
+        
+        let stationCount = 0;
+        data.features.forEach(feature => {
+          if (feature.geometry && feature.properties) {
+            const coords = feature.geometry.coordinates;
+            const props = feature.properties;
+            
+            if (coords && coords.length >= 2) {
+              const [lng, lat] = coords;
+              if (isValidCoord(lat, lng)) {
+                addWeatherStation(lat, lng, props);
+                stationCount++;
+              }
+            }
+          }
+        });
+        
+        weatherData = data;
+        return stationCount;
+        
+      } catch (error) {
+        console.error('Error loading weather data:', error);
+        throw error;
+      }
+    }
+
+    function addWeatherStation(lat, lng, stationData) {
+      try {
+        if (!weatherGroup) {
+          weatherGroup = new THREE.Group();
+          earthGroup.add(weatherGroup);
+        }
+        
+        const position = latLngToVector3(lat, lng, RADIUS + 25); // Slightly above surface
+        
+        // Create weather station marker
+        const canvas = document.createElement('canvas');
+        canvas.width = 48;
+        canvas.height = 48;
+        const ctx = canvas.getContext('2d');
+        
+        // Determine color based on temperature
+        let color = '#4CAF50'; // default green
+        const temp = stationData.Temperature_C;
+        if (typeof temp === 'number') {
+          if (temp < -10) color = '#2196F3'; // blue for very cold
+          else if (temp < 0) color = '#03A9F4'; // light blue for cold
+          else if (temp < 10) color = '#4CAF50'; // green for cool
+          else if (temp < 25) color = '#FFEB3B'; // yellow for warm
+          else if (temp < 35) color = '#FF9800'; // orange for hot
+          else color = '#F44336'; // red for very hot
+        }
+        
+        // Draw background circle
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(24, 24, 20, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Add border
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        
+        // Add weather icon/emoji based on conditions
+        let weatherIcon = '🌤️'; // default
+        const conditions = (stationData.CurrentConditions || '').toLowerCase();
+        if (conditions.includes('clear') || conditions.includes('sunny')) weatherIcon = '☀️';
+        else if (conditions.includes('cloud')) weatherIcon = '☁️';
+        else if (conditions.includes('rain')) weatherIcon = '🌧️';
+        else if (conditions.includes('snow')) weatherIcon = '❄️';
+        else if (conditions.includes('fog')) weatherIcon = '🌫️';
+        else if (conditions.includes('storm')) weatherIcon = '⛈️';
+        
+        ctx.font = 'bold 16px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'white';
+        ctx.fillText(weatherIcon, 24, 24);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(material);
+        sprite.position.copy(position);
+        sprite.scale.setScalar(40);
+        sprite.userData = { 
+          type: 'weather-station', 
+          lat, 
+          lng, 
+          stationData,
+          name: stationData.Title || stationData.NAME || `Weather Station`
+        };
+        
+        weatherGroup.add(sprite);
+        
+      } catch (error) {
+        console.error(`Error adding weather station at ${lat}, ${lng}:`, error);
+      }
+    }
+
+    function showWeatherDetails(station) {
+      const detailsDiv = document.getElementById('earthquake-details');
+      const data = station.stationData;
+
+      const temp = data.Temperature_C;
+      const windSpeed = data.WindSpeed_kmh;
+      const windDir = data.WindDirection;
+      const humidity = data.Humidity_Percent;
+      const conditions = data.CurrentConditions;
+      const province = data.PROV;
+      const updated = data.Updated ? new Date(data.Updated).toLocaleString() : 'Unknown';
+
+      let tempDisplay = typeof temp === 'number' ? `${temp.toFixed(1)}°C` : 'N/A';
+      let windDisplay = typeof windSpeed === 'number' ? `${windSpeed} km/h` : 'N/A';
+      if (typeof windDir === 'number') {
+        const directions = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+        const dirIndex = Math.round(windDir / 22.5) % 16;
+        windDisplay += ` ${directions[dirIndex]}`;
+      }
+
+      detailsDiv.innerHTML = `
+        <div class="earthquake-info">
+          <h4 style="color: #4CAF50; margin-bottom: 10px;">🌤️ ${esc(station.name)}</h4>
+          <div><strong>Location:</strong> ${station.lat.toFixed(4)}°, ${station.lng.toFixed(4)}°</div>
+          ${province ? `<div><strong>Province:</strong> ${esc(province)}</div>` : ''}
+          <div><strong>Temperature:</strong> ${tempDisplay}</div>
+          <div><strong>Wind:</strong> ${windDisplay}</div>
+          ${typeof humidity === 'number' ? `<div><strong>Humidity:</strong> ${humidity}%</div>` : ''}
+          ${conditions ? `<div><strong>Conditions:</strong> ${esc(conditions)}</div>` : ''}
+          ${data.CurrentForecastHigh ? `<div><strong>Today's High:</strong> ${data.CurrentForecastHigh}°C</div>` : ''}
+          ${data.CurrentForecastLow ? `<div><strong>Today's Low:</strong> ${data.CurrentForecastLow}°C</div>` : ''}
+          <div><strong>Last Updated:</strong> ${updated}</div>
+          <div style="margin-top: 10px; font-size: 11px; opacity: 0.8;">
+            Weather data courtesy Environment Canada. Updated hourly.
+          </div>
+        </div>
+      `;
+    }
+
+    function focusOnWeatherStation(lat, lng) {
+      if (!isValidCoord(lat, lng)) return;
+
+      const latRad = lat * Math.PI / 180;
+      const lngRad = lng * Math.PI / 180;
+
+      const targetRotationY = -lngRad;
+      const targetRotationX = -latRad;
+
+      const startRotationY = earthGroup.rotation.y;
+      const startRotationX = earthGroup.rotation.x;
+
+      const duration = 1500;
+      const startTime = Date.now();
+
+      function animateToStation() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+        earthGroup.rotation.y = startRotationY + (targetRotationY - startRotationY) * easeProgress;
+        earthGroup.rotation.x = startRotationX + (targetRotationX - startRotationX) * easeProgress;
+
+        if (progress < 1) requestAnimationFrame(animateToStation);
+      }
+
+      animateToStation();
+    }
+
+    function startWeatherUpdate() {
+      if (!showWeather) return;
+      if (weatherUpdateInterval) clearInterval(weatherUpdateInterval);
+      // Refresh weather data every 60 minutes (Environment Canada updates hourly)
+      weatherUpdateInterval = setInterval(async () => {
+        if (!showWeather) return;
+        try {
+          await refreshWeather();
+        } catch (e) {
+          console.warn('Weather update failed:', e);
+        }
+      }, 60 * 60 * 1000);
     }
 
     init();
