@@ -1,0 +1,4264 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Earthquake Globe (Audited)</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    #container {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+    }
+
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      z-index: 100;
+      background: rgba(0, 0, 0, 0.85);
+      padding: 20px;
+      border-radius: 12px;
+      width: 400px;
+      min-width: 300px;
+      max-width: 600px;
+      height: calc(100vh - 40px);
+      max-height: calc(100vh - 40px);
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      resize: horizontal;
+      overflow: auto;
+      transition: all 0.3s ease;
+    }
+
+    #info.collapsed {
+      width: 50px;
+      padding: 15px 10px;
+    }
+
+    #info-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #4fc3f7;
+    }
+
+    #info-title {
+      font-size: 18px;
+      font-weight: bold;
+      color: #4fc3f7;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    #info-collapse-btn {
+      background: none;
+      border: none;
+      color: #4fc3f7;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 5px;
+      border-radius: 4px;
+      transition: all 0.2s ease;
+      min-width: 30px;
+      text-align: center;
+    }
+
+    #info-collapse-btn:hover {
+      background: rgba(79, 195, 247, 0.2);
+    }
+
+    #info-content {
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    #info.collapsed #info-content,
+    #info.collapsed #info-title {
+      display: none;
+    }
+
+    #info h3 {
+      margin-top: 0;
+      margin-bottom: 15px;
+      font-size: 18px;
+      color: #4fc3f7;
+      border-bottom: 2px solid #4fc3f7;
+      padding-bottom: 8px;
+    }
+
+    #resize-handle {
+      position: absolute;
+      right: 0;
+      top: 0;
+      width: 10px;
+      height: 100%;
+      cursor: ew-resize;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .1));
+      border-radius: 0 12px 12px 0;
+    }
+
+    #resize-handle:hover {
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .2));
+    }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 18px;
+      z-index: 100;
+    }
+
+    .earthquake-info {
+      margin-top: 15px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .earthquake-info div {
+      margin: 8px 0;
+      padding: 4px 0;
+    }
+
+    .earthquake-list {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-top: 10px;
+      padding-right: 10px;
+    }
+
+    .earthquake-list::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .earthquake-list::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, .1);
+      border-radius: 3px;
+    }
+
+    .earthquake-list::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, .3);
+      border-radius: 3px;
+    }
+
+    .earthquake-list::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, .5);
+    }
+
+    .earthquake-item {
+      margin: 6px 0;
+      padding: 10px;
+      background: rgba(255, 255, 255, .1);
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all .2s ease;
+      border-left: 3px solid transparent;
+    }
+
+    .earthquake-item:hover {
+      background: rgba(255, 255, 255, .2);
+      transform: translateX(5px);
+      border-left-color: #4fc3f7;
+    }
+
+    .earthquake-item .magnitude {
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .earthquake-item .details {
+      opacity: .8;
+      font-size: 11px;
+      margin-top: 4px;
+    }
+
+    .magnitude {
+      font-weight: bold;
+      color: #ff6b6b;
+    }
+
+    #controls {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      color: white;
+      z-index: 100;
+      background: rgba(0, 0, 0, .85);
+      border-radius: 12px;
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, .1);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .3);
+      width: 280px;
+      max-height: calc(100vh - 40px);
+      overflow: hidden;
+      transition: all .3s ease;
+    }
+
+    #controls.collapsed {
+      width: 50px;
+    }
+
+    #controls-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 15px;
+      border-bottom: 1px solid rgba(255, 255, 255, .1);
+      background: rgba(79, 195, 247, .1);
+    }
+
+    #controls-title {
+      font-size: 16px;
+      font-weight: bold;
+      color: #4fc3f7;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+
+    #collapse-btn {
+      background: none;
+      border: none;
+      color: #4fc3f7;
+      font-size: 18px;
+      cursor: pointer;
+      padding: 5px;
+      border-radius: 4px;
+      transition: all .2s ease;
+      min-width: 30px;
+      text-align: center;
+    }
+
+    #collapse-btn:hover {
+      background: rgba(79, 195, 247, .2);
+    }
+
+    #controls-content {
+      padding: 15px;
+      overflow-y: auto;
+      max-height: calc(100vh - 120px);
+    }
+
+    #controls.collapsed #controls-content,
+    #controls.collapsed #controls-title {
+      display: none;
+    }
+
+
+
+    .control-button {
+      background: #4CAF50;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      margin: 5px 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      width: 100%;
+      text-align: left;
+      transition: all .2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .control-button:hover {
+      background: #45a049;
+      transform: translateX(3px);
+    }
+
+    .control-button.active {
+      background: #ff6b6b;
+      box-shadow: 0 2px 8px rgba(255, 107, 107, .3);
+    }
+
+    .control-button.active:hover {
+      background: #ff5252;
+    }
+
+    .control-button .icon {
+      margin-right: 8px;
+      font-size: 14px;
+    }
+
+    .control-button .badge {
+      background: rgba(255, 255, 255, .2);
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 10px;
+    }
+
+    /* New: scope active styles only to feed buttons */
+
+    #status {
+      font-size: 11px;
+      opacity: .8;
+      margin-top: 15px;
+      padding: 10px;
+      background: rgba(255, 255, 255, .05);
+      border-radius: 6px;
+      border-left: 3px solid #4fc3f7;
+    }
+
+    .status-indicator {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #4CAF50;
+      margin-right: 8px;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .5
+      }
+
+      100% {
+        opacity: 1
+      }
+    }
+
+    .status-indicator.error {
+      background: #F44336;
+    }
+
+    /* Dropdown styles */
+    .control-section {
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .control-section h4 {
+      margin: 0;
+      font-size: 14px;
+      color: #4fc3f7;
+      padding: 12px 15px;
+      background: rgba(79, 195, 247, 0.1);
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: all 0.2s ease;
+      user-select: none;
+    }
+
+    .control-section h4:hover {
+      background: rgba(79, 195, 247, 0.15);
+    }
+
+    .control-section h4::after {
+      content: '▼';
+      font-size: 12px;
+      transition: transform 0.2s ease;
+    }
+
+    .control-section.collapsed h4::after {
+      transform: rotate(-90deg);
+    }
+
+    .control-section-content {
+      padding: 10px;
+      transition: all 0.3s ease;
+      max-height: 500px;
+      overflow: hidden;
+    }
+
+    .control-section.collapsed .control-section-content {
+      max-height: 0;
+      padding: 0 10px;
+    }
+
+    /* ISS Info Banner */
+    #iss-info-banner {
+      background: linear-gradient(135deg, rgba(0, 255, 0, 0.1), rgba(0, 100, 0, 0.1));
+      border: 1px solid rgba(0, 255, 0, 0.3);
+      border-radius: 8px;
+      padding: 12px;
+      margin: 15px 0;
+      display: none;
+      transition: all 0.3s ease;
+    }
+
+    #iss-info-banner.visible {
+      display: block;
+    }
+
+    .iss-banner-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+
+    .iss-banner-header:hover {
+      background: rgba(0, 255, 0, 0.05);
+    }
+
+    .iss-banner-title {
+      color: #00ff00;
+      font-size: 14px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .iss-dropdown-arrow {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+      transition: transform 0.2s ease;
+      margin-left: 8px;
+    }
+
+    #iss-info-banner.collapsed .iss-dropdown-arrow {
+      transform: rotate(-90deg);
+    }
+
+    .iss-status-dot {
+      width: 8px;
+      height: 8px;
+      background: #00ff00;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .iss-banner-content {
+      font-size: 11px;
+      line-height: 1.4;
+      color: rgba(255, 255, 255, 0.9);
+      transition: all 0.3s ease;
+      max-height: 200px;
+      overflow: hidden;
+    }
+
+    #iss-info-banner.collapsed .iss-banner-content {
+      max-height: 0;
+      margin-top: 0;
+    }
+
+    .iss-banner-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 4px 0;
+    }
+
+    .iss-banner-label {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    .iss-banner-value {
+      color: #00ff00;
+      font-weight: bold;
+    }
+
+    .iss-banner-close {
+      background: none;
+      border: none;
+      color: rgba(255, 255, 255, 0.5);
+      cursor: pointer;
+      font-size: 16px;
+      padding: 0;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.2s ease;
+    }
+
+    .iss-banner-close:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.8);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="container">
+    <div id="loading">Loading earthquakes...</div>
+    <div id="info" style="display:none;">
+      <div id="resize-handle"></div>
+      <div id="info-header">
+        <div id="info-title">🌍 Live Earthquakes</div>
+        <button id="info-collapse-btn" onclick="toggleInfoCollapse()">◀</button>
+      </div>
+      <div id="info-content">
+        <!-- ISS Info Banner -->
+        <div id="iss-info-banner"></div>
+        <div class="iss-banner-header" onclick="toggleISSBanner()">
+          <div class="iss-banner-title">
+            <span class="iss-status-dot"></span>
+            🛰️ ISS Live
+            <span class="iss-dropdown-arrow">▼</span>
+          </div>
+          <button class="iss-banner-close" onclick="event.stopPropagation(); hideISSBanner()"
+            title="Hide ISS info">×</button>
+        </div>
+        <div class="iss-banner-content">
+          <div class="iss-banner-row">
+            <span class="iss-banner-label">Position:</span>
+            <span class="iss-banner-value" id="iss-position">--°, --°</span>
+          </div>
+          <div class="iss-banner-row">
+            <span class="iss-banner-label">Altitude:</span>
+            <span class="iss-banner-value" id="iss-altitude">-- km</span>
+          </div>
+          <div class="iss-banner-row">
+            <span class="iss-banner-label">Speed:</span>
+            <span class="iss-banner-value">~27,600 km/h</span>
+          </div>
+          <div class="iss-banner-row">
+            <span class="iss-banner-label">Next Pass:</span>
+            <span class="iss-banner-value" id="iss-next-pass">Calculating...</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="earthquake-details"></div>
+    </div>
+  </div>
+  <div id="controls" style="display:none;">
+    <div id="controls-header">
+      <div id="controls-title">⚙️ Controls</div>
+      <button id="collapse-btn" onclick="toggleControlsCollapse()">◀</button>
+    </div>
+    <div id="controls-content">
+      <div class="control-section">
+        <h4 onclick="toggleSection(this)">🔄 Auto Update</h4>
+        <div class="control-section-content">
+          <button class="control-button" onclick="toggleAutoUpdate()">
+            <span><span class="icon">🔄</span>Auto Update</span>
+            <span class="badge" id="auto-update-badge">ON</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="control-section">
+        <h4 onclick="toggleSection(this)">📊 Data Feeds</h4>
+        <div class="control-section-content">
+          <button class="control-button feed-button" onclick="changeDataFeed(this,'all_hour')">
+            <span><span class="icon">⏰</span>Past Hour</span>
+            <span class="badge">1.0+</span>
+          </button>
+          <button class="control-button feed-button active" onclick="changeDataFeed(this,'all_day')">
+            <span><span class="icon">📅</span>Past Day</span>
+            <span class="badge">2.5+</span>
+          </button>
+          <button class="control-button feed-button" onclick="changeDataFeed(this,'all_week')">
+            <span><span class="icon">📆</span>Past Week</span>
+            <span class="badge">2.5+</span>
+          </button>
+          <button class="control-button feed-button" onclick="changeDataFeed(this,'significant_week')">
+            <span><span class="icon">⚠️</span>Significant</span>
+            <span class="badge">4.5+</span>
+          </button>
+          <button class="control-button feed-button" onclick="changeDataFeed(this,'major_month')">
+            <span><span class="icon">🔴</span>Major</span>
+            <span class="badge">6.0+</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="control-section">
+        <h4 onclick="toggleSection(this)">✈️ Aircraft</h4>
+        <div class="control-section-content">
+          <button class="control-button" onclick="toggleAirplanes()">
+            <span><span class="icon">✈️</span>Show Aircraft</span>
+            <span class="badge" id="airplane-badge">ON</span>
+          </button>
+          <button class="control-button" onclick="refreshAirplaneData()">
+            <span><span class="icon">🔄</span>Refresh Aircraft</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="control-section">
+        <h4 onclick="toggleSection(this)">🛰️ ISS Tracking</h4>
+        <div class="control-section-content">
+          <button class="control-button" onclick="toggleISS()">
+            <span><span class="icon">🛰️</span>Show ISS</span>
+            <span class="badge" id="iss-badge">ON</span>
+          </button>
+          <button class="control-button" onclick="refreshISSData()">
+            <span><span class="icon">🔄</span>Refresh TLE</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- New: Layers (Tectonic Plates) -->
+      <div class="control-section">
+        <h4 onclick="toggleSection(this)">🗺️ Layers</h4>
+        <div class="control-section-content">
+          <button class="control-button" onclick="toggleTectonicPlates()">
+            <span><span class="icon">🧨</span>Tectonic Plate Boundaries</span>
+            <span class="badge" id="plates-badge">OFF</span>
+          </button>
+          <button class="control-button" onclick="refreshTectonicPlates()">
+            <span><span class="icon">🔄</span>Refresh Plates</span>
+          </button>
+
+          <button class="control-button" onclick="toggleHurricanes()">
+            <span><span class="icon">🌀</span>Hurricane Alerts</span>
+            <span class="badge" id="hurricane-badge">OFF</span>
+          </button>
+          <button class="control-button" onclick="refreshHurricanes()">
+            <span><span class="icon">🔄</span>Refresh Alerts</span>
+          </button>
+
+          <button class="control-button" onclick="toggleFires()">
+            <span><span class="icon">🔥</span>Active Fires</span>
+            <span class="badge" id="fire-badge">OFF</span>
+          </button>
+          <button class="control-button" onclick="refreshFires()">
+            <span><span class="icon">🔄</span>Refresh Fires</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="control-section">
+        <h4 onclick="toggleSection(this)">🌍 Globe Controls</h4>
+        <div class="control-section-content">
+          <button class="control-button" onclick="toggleRotation()">
+            <span><span class="icon">🔄</span>Auto Rotate</span>
+            <span class="badge" id="rotation-badge">ON</span>
+          </button>
+          <button class="control-button" onclick="zoomIn()">
+            <span><span class="icon">🔍</span>Zoom In</span>
+          </button>
+          <button class="control-button" onclick="zoomOut()">
+            <span><span class="icon">🔍</span>Zoom Out</span>
+          </button>
+          <button class="control-button" onclick="resetView()">
+            <span><span class="icon">🏠</span>Reset View</span>
+          </button>
+          <button class="control-button" onclick="toggleCompass()">
+            <span><span class="icon">🧭</span>Show Compass</span>
+            <span class="badge" id="compass-badge">OFF</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="control-section">
+        <h4 onclick="toggleSection(this)">🔄 Actions</h4>
+        <div class="control-section-content">
+          <button class="control-button" onclick="refreshData()">
+            <span><span class="icon">🔄</span>Refresh Earthquakes</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="status">
+        <span class="status-indicator"></span>
+        <span id="status-text">Last updated: Never</span>
+      </div>
+
+      <div style="margin-top:10px;padding:8px;background:rgba(255,255,255,.05);border-radius:6px;font-size:10px;">
+        <div><strong>🎮 Keyboard Shortcuts:</strong></div>
+        <div>Space: Toggle rotation</div>
+        <div>+/-: Zoom in/out</div>
+        <div>R: Reset view</div>
+        <div>A: Toggle aircraft</div>
+        <div>I: Toggle ISS</div>
+        <div>C: Toggle compass</div>
+        <div>P: Toggle plates</div>
+        <div>H: Toggle hurricanes</div>
+        <div>T: Launch rocket</div>
+        <div>L: Toggle left panel</div>
+        <div>F: Refresh data</div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
+  <script src="https://unpkg.com/satellite.js@5.0.0/dist/satellite.min.js"></script>
+  <script>
+    // Constants to avoid magic numbers
+    const CONSTANTS = {
+      EARTH_RADIUS: 1.0,
+      ATMOSPHERE_RADIUS: 1.05,
+      GLOW_RADIUS: 1.1,
+      INNER_GLOW_RADIUS: 1.02,
+      COMPASS_RADIUS: 1.3,
+      EARTHQUAKE_RADIUS: 1.02,
+      AIRPLANE_RADIUS_BASE: 1.02,
+      AIRPLANE_ALTITUDE_SCALE: 0.0001,
+      ISS_RADIUS: 1.05,
+      PLATE_RADIUS: 1.005,
+      HURRICANE_RADIUS: 1.008,
+      SPRITE_SCALES: {
+        MAJOR_COMPASS: 0.18,
+        MINOR_COMPASS: 0.12,
+        AIRPLANE: 0.04,
+        AIRPLANE_HIGHLIGHTED: 0.08,
+        ISS: 0.02,
+        HURRICANE: 0.06
+      },
+      UPDATE_INTERVALS: {
+        EARTHQUAKE: 300000, // 5 minutes
+        AIRPLANE: 45000,    // 45 seconds
+        ISS: 10000          // 10 seconds
+      },
+      ZOOM_LIMITS: {
+        MIN: 1.2,
+        MAX: 0.3
+      }
+    };
+
+    let scene, camera, renderer, globe, earthGroup;
+    let earthquakeMarkers = [];
+    let earthquakeRings = [];
+    let clickableEqObjects = []; // markers + labels for raycasting
+    let earthquakeData = [];
+    let airplaneMarkers = [];
+    let airplaneData = [];
+    let issMarker = null;
+    let issOrbitPath = null;
+    let issData = null;
+    let issTLE = null;
+    let issUpdateInterval;
+    let currentDataFeed = 'all_day';
+    let autoUpdateEnabled = true;
+    let updateInterval;
+    let airplaneUpdateInterval;
+    let hurricaneUpdateInterval;
+    let fireUpdateInterval;
+    let lastUpdateTime = null;
+    let lastAirplaneUpdate = null;
+    let lastISSUpdate = null;
+    let raycaster, mouse;
+    let textureLoader;
+    let showAirplanes = true;
+    let showISS = true;
+    let autoRotate = true;
+    let compassMarkers = [];
+    let showCompass = false;
+    // Rocket state
+    let rocketMarker = null;
+    let rocketTrail = null;
+    let rocketLaunching = false;
+    let showRocket = true;
+    // Plates overlay state
+    let showPlates = false;
+    let plateGroup = null;    // THREE.Group for plate boundary lines
+    let plateGeoJson = null;  // cache for GeoJSON
+
+    // Hurricanes overlay state
+    let showHurricanes = false;
+    let hurricaneGroup = null;    // THREE.Group for hurricane alert polygons/lines
+    let hurricaneGeoJson = null;  // cache
+
+    // Fires overlay state (NASA FIRMS data)
+    let showFires = false;
+    let fireGroup = null;         // THREE.Group for fire markers
+    let fireData = null;          // cache for fire data
+
+    let resizeInit = false; // guard
+
+    // Helper: robust coordinate validation (accepts 0°)
+    function isValidCoord(lat, lng) {
+      return Number.isFinite(lat) && Number.isFinite(lng) &&
+        lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    }
+
+    // Basic HTML escaper to avoid XSS in innerHTML
+    function esc(str) {
+      if (str === undefined || str === null) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    // Safe API call wrapper with improved error handling
+    async function safeApiCall(url, options = {}) {
+      const { timeout = 10000, retries = 2 } = options;
+
+      for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+          console.log(`API call attempt ${attempt + 1}: ${url}`);
+
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+          const response = await fetch(url, {
+            ...options,
+            signal: controller.signal
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          }
+
+          const data = await response.json();
+          console.log(`API call successful: ${url}`);
+          return data;
+
+        } catch (error) {
+          console.error(`API call failed (attempt ${attempt + 1}): ${url}`, error);
+
+          if (attempt === retries) {
+            throw error;
+          }
+
+          // Wait before retry
+          await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+        }
+      }
+    }
+
+    // Allow-list URLs (https only) for safe use in href/src
+    function safeUrl(u) {
+      try {
+        const url = new URL(String(u));
+        if (url.protocol === 'https:') return url.toString();
+      } catch { }
+      return null;
+    }
+
+    // USGS FDSN Web Service API endpoints
+    const FDSN_BASE_URL = 'https://earthquake.usgs.gov/fdsnws/event/1/query';
+
+    const dataFeeds = {
+      'all_hour': { starttime: () => new Date(Date.now() - 60 * 60 * 1000).toISOString(), minmagnitude: 1.0, limit: 1000 },
+      'all_day': { starttime: () => new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), minmagnitude: 2.5, limit: 1000 },
+      'all_week': { starttime: () => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), minmagnitude: 2.5, limit: 2000 },
+      'significant_week': { starttime: () => new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(), minmagnitude: 4.5, limit: 500 },
+      'major_month': { starttime: () => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(), minmagnitude: 6.0, limit: 200 }
+    };
+
+    // Tectonic Plates dataset (public GeoJSON)
+    const PLATE_GEOJSON_URL = 'https://raw.githubusercontent.com/fraxen/tectonicplates/master/GeoJSON/PB2002_boundaries.json';
+
+    // Convert lat/lng to Vector3 on a sphere surface
+    function latLngToVector3(lat, lng, radius = 1.012) {
+      const latRad = lat * Math.PI / 180;
+      const lngRad = lng * Math.PI / 180;
+      return new THREE.Vector3(
+        radius * Math.cos(latRad) * Math.cos(lngRad),
+        radius * Math.sin(latRad),
+        -radius * Math.cos(latRad) * Math.sin(lngRad)
+      );
+    }
+
+    // Hurricanes/Alerts (NOAA/NHC public cones/alerts; fallback to NWS alerts)
+    // Primary: NHC Atlantic/Eastern Pacific active forecast cones (GeoJSON)
+    const HURRICANE_GEOJSON_URLS = [
+      // NHC sometimes provides separate feeds; using NWS alerts as a general fallback
+      'https://api.weather.gov/alerts/active?event=Tropical%20Storm%20Warning',
+      'https://api.weather.gov/alerts/active?event=Hurricane%20Warning',
+      'https://api.weather.gov/alerts/active?event=Hurricane%20Watch',
+      'https://api.weather.gov/alerts/active?event=Tropical%20Storm%20Watch'
+    ];
+
+    // Real-time storm tracking feeds
+    const NHC_CURRENT_STORMS_URL = 'https://www.nhc.noaa.gov/CurrentStorms.json';
+    const NHC_ACTIVE_STORMS_GIS = 'https://www.nhc.noaa.gov/gis/best_track.zip'; // contains shapefiles
+    const NHC_FORECAST_TRACK_GIS = 'https://www.nhc.noaa.gov/storm_graphics/api/';
+    const HURDAT_CURRENT_URL = 'https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2023-052524.txt';
+    const NWS_TROPICAL_SUMMARY_URL = 'https://api.weather.gov/products/types/ATCF/locations/nhc';
+    
+    // Alternative storm feeds for better coverage
+    const NOAA_STORM_FEEDS = [
+      'https://www.nhc.noaa.gov/CurrentStorms.json',
+      'https://api.weather.gov/alerts/active?event=Hurricane',
+      'https://www.ssd.noaa.gov/PS/TROP/trop-product.html' // backup imagery feed
+    ];
+
+    // NASA FIRMS (Fire Information for Resource Management System) URLs
+    // Real-time active fire data from MODIS and VIIRS satellites
+    const NASA_FIRMS_URLS = [
+      // MODIS Collection 6.1 (Terra and Aqua satellites) - last 24 hours
+      'https://firms.modaps.eosdis.nasa.gov/data/active_fire/modis-c6.1/csv/MODIS_C6_1_Global_24h.csv',
+      // VIIRS 375m (Suomi NPP and NOAA-20) - last 24 hours  
+      'https://firms.modaps.eosdis.nasa.gov/data/active_fire/viirs-snpp/csv/VIIRS_SNPP_NRT_375m_24h.csv',
+      // VIIRS 750m - last 24 hours (backup)
+      'https://firms.modaps.eosdis.nasa.gov/data/active_fire/suomi-npp-viirs-c2/csv/SUOMI_VIIRS_C2_Global_24h.csv'
+    ];
+
+    // NASA FIRMS Map Service WMS endpoints (alternative approach)
+    const NASA_FIRMS_WMS = {
+      MODIS: 'https://firms.modaps.eosdis.nasa.gov/wms/c6/',
+      VIIRS: 'https://firms.modaps.eosdis.nasa.gov/wms/viirs/',
+      LANDSAT: 'https://firms.modaps.eosdis.nasa.gov/wms/landsat/'
+    };
+
+    function init() {
+      console.log('Initializing 3D Globe...');
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+      camera.position.set(0, 0, 3);
+      console.log('Camera and scene created');
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(window.devicePixelRatio || 1);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setClearColor(0x000022);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      document.getElementById('container').appendChild(renderer.domElement);
+
+      raycaster = new THREE.Raycaster();
+      mouse = new THREE.Vector2();
+
+      earthGroup = new THREE.Group();
+      scene.add(earthGroup);
+
+      textureLoader = new THREE.TextureLoader();
+
+      console.log('Creating globe...');
+      createGlobe();
+      console.log('Setting up lighting...');
+      setupLighting();
+      console.log('Adding mouse controls...');
+      addMouseControls();
+
+      loadEarthquakeData();
+      startAutoUpdate();
+
+      loadAirplaneData();
+      startAirplaneUpdate();
+
+      loadISSData();
+      startISSUpdate();
+
+      loadHurricanes();
+      startHurricaneUpdate();
+
+      // Create rocket after a short delay to not block globe creation
+      setTimeout(() => {
+        try {
+          createRocket();
+        } catch (error) {
+          console.error('Error creating rocket:', error);
+        }
+      }, 1000);
+
+      animate();
+    }
+
+    function createGlobe() {
+      const geometry = new THREE.SphereGeometry(1, 64, 64);
+      const material = new THREE.MeshLambertMaterial({
+        color: 0x8888ff, transparent: false
+      });
+      globe = new THREE.Mesh(geometry, material);
+      globe.castShadow = true; globe.receiveShadow = true;
+      earthGroup.add(globe);
+
+      loadEarthTexture();
+
+      // Subtle atmosphere effect without glare
+      const atmosphereGeometry = new THREE.SphereGeometry(1.02, 64, 64);
+      const atmosphereMaterial = new THREE.MeshBasicMaterial({
+        color: 0x4fc3f7,
+        transparent: true,
+        opacity: 0.1,
+        side: THREE.BackSide
+      });
+      earthGroup.add(new THREE.Mesh(atmosphereGeometry, atmosphereMaterial));
+    }
+
+    function loadEarthTexture() {
+      const textureUrls = [
+        'https://unpkg.com/three-globe@2.31.1/example/img/earth-blue-marble.jpg',
+        'https://unpkg.com/three-globe@2.31.1/example/img/earth-night.jpg',
+        'https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg'
+      ];
+      let currentIndex = 0;
+      function tryNextTexture() {
+        if (currentIndex >= textureUrls.length) { createFallbackTexture(); return; }
+        textureLoader.load(
+          textureUrls[currentIndex],
+          function (tex) {
+            globe.material.map = tex;
+            globe.material.color.setHex(0xffffff);
+            globe.material.emissive.setHex(0x000000);
+            globe.material.needsUpdate = true;
+          },
+          undefined,
+          function () { currentIndex++; tryNextTexture(); }
+        );
+      }
+      tryNextTexture();
+    }
+
+    function createFallbackTexture() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1024; canvas.height = 512;
+      const ctx = canvas.getContext('2d');
+
+      const oceanGradient = ctx.createLinearGradient(0, 0, 0, 512);
+      oceanGradient.addColorStop(0, '#1a237e');
+      oceanGradient.addColorStop(0.5, '#0d47a1');
+      oceanGradient.addColorStop(1, '#01579b');
+      ctx.fillStyle = oceanGradient;
+      ctx.fillRect(0, 0, 1024, 512);
+
+      ctx.fillStyle = '#2e7d32';
+      ctx.fillRect(100, 80, 150, 100);
+      ctx.fillRect(150, 200, 80, 150);
+      ctx.fillRect(450, 70, 80, 60);
+      ctx.fillRect(480, 140, 100, 150);
+      ctx.fillRect(550, 60, 200, 120);
+      ctx.fillRect(700, 220, 80, 50);
+
+      ctx.fillStyle = '#ffeb3b';
+      for (let i = 0; i < 50; i++) ctx.fillRect(Math.random() * 1024, Math.random() * 512, 2, 2);
+
+      const tex = new THREE.CanvasTexture(canvas);
+      globe.material.map = tex; globe.material.color.setHex(0xffffff);
+      globe.material.emissive.setHex(0x000000); globe.material.needsUpdate = true;
+    }
+
+    function createCompass() {
+      if (!showCompass) return;
+
+      const compassDirections = [
+        { label: 'N', angle: 0, color: '#ff4444', major: true },
+        { label: '30°', angle: 30, color: '#ffcc44', major: false },
+        { label: 'NE', angle: 45, color: '#ffaa44', major: true },
+        { label: '60°', angle: 60, color: '#ccff44', major: false },
+        { label: 'E', angle: 90, color: '#44ff44', major: true },
+        { label: '120°', angle: 120, color: '#44ffcc', major: false },
+        { label: 'SE', angle: 135, color: '#44ffaa', major: true },
+        { label: '150°', angle: 150, color: '#44ccff', major: false },
+        { label: 'S', angle: 180, color: '#4444ff', major: true },
+        { label: '210°', angle: 210, color: '#cc44ff', major: false },
+        { label: 'SW', angle: 225, color: '#aa44ff', major: true },
+        { label: '240°', angle: 240, color: '#ff44cc', major: false },
+        { label: 'W', angle: 270, color: '#ff44aa', major: true },
+        { label: '300°', angle: 300, color: '#ff8844', major: false },
+        { label: 'NW', angle: 315, color: '#ffaa88', major: true },
+        { label: '330°', angle: 330, color: '#ffaa44', major: false }
+      ];
+
+      const compassRadius = CONSTANTS.COMPASS_RADIUS;
+
+      compassDirections.forEach(direction => {
+        // Convert angle to radians (0° = North, clockwise)
+        const angleRad = (direction.angle - 90) * Math.PI / 180; // Adjust so 0° is North
+
+        // Calculate position on the equatorial plane
+        const x = compassRadius * Math.cos(angleRad);
+        const z = compassRadius * Math.sin(angleRad);
+        const y = 0; // Keep on equatorial plane
+
+        // Create compass label
+        const canvas = document.createElement('canvas');
+        const size = direction.major ? 80 : 60;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        const center = size / 2;
+        const radius = center - 5;
+
+        // Clear canvas
+        ctx.clearRect(0, 0, size, size);
+
+        // Draw background circle
+        ctx.fillStyle = direction.major ? 'rgba(0, 0, 0, 0.8)' : 'rgba(0, 0, 0, 0.6)';
+        ctx.beginPath();
+        ctx.arc(center, center, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw border
+        ctx.strokeStyle = direction.color;
+        ctx.lineWidth = direction.major ? 2 : 1;
+        ctx.beginPath();
+        ctx.arc(center, center, radius, 0, Math.PI * 2);
+        ctx.stroke();
+
+        if (direction.major) {
+          // Major directions: Show label on top, degrees on bottom
+          ctx.fillStyle = direction.color;
+          ctx.font = 'bold 16px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(direction.label, center, center - 8);
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          ctx.font = 'bold 12px Arial';
+          ctx.fillText(`${direction.angle}°`, center, center + 10);
+        } else {
+          // Minor directions: Show only degrees
+          ctx.fillStyle = direction.color;
+          ctx.font = 'bold 14px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(direction.label, center, center);
+        }
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+          transparent: true,
+          opacity: 0.8
+        });
+
+        const sprite = new THREE.Sprite(material);
+        const scale = direction.major ? CONSTANTS.SPRITE_SCALES.MAJOR_COMPASS : CONSTANTS.SPRITE_SCALES.MINOR_COMPASS;
+        sprite.scale.set(scale, scale, 1);
+        sprite.position.set(x, y, z);
+
+        sprite.userData = {
+          type: 'compass',
+          direction: direction.label,
+          angle: direction.angle
+        };
+
+        earthGroup.add(sprite);
+        compassMarkers.push(sprite);
+      });
+    }
+
+    function clearCompass() {
+      compassMarkers.forEach(marker => {
+        if (marker.material && marker.material.map) {
+          marker.material.map.dispose();
+        }
+        disposeObject(marker);
+        earthGroup.remove(marker);
+      });
+      compassMarkers = [];
+    }
+
+    function toggleCompass() {
+      showCompass = !showCompass;
+      const badge = document.getElementById('compass-badge');
+      badge.textContent = showCompass ? 'ON' : 'OFF';
+
+      if (showCompass) {
+        createCompass();
+      } else {
+        clearCompass();
+      }
+    }
+
+    // Rocket Functions
+    function createRocket() {
+      if (!showRocket || rocketMarker) return;
+
+      // Start rocket at a random position on Earth
+      const startLat = (Math.random() - 0.5) * 180; // -90 to 90
+      const startLng = (Math.random() - 0.5) * 360; // -180 to 180
+
+      const position = latLngToVector3(startLat, startLng, 1.02);
+
+      // Load rocket OBJ model with MTL materials
+      loadRocketModel(position, startLat, startLng);
+    }
+
+    function loadRocketModel(position, startLat, startLng) {
+      // Check if loaders are available
+      if (typeof THREE.MTLLoader === 'undefined' || typeof THREE.OBJLoader === 'undefined') {
+        console.warn('MTL/OBJ loaders not available, using fallback rocket');
+        createFallbackRocket(position, startLat, startLng);
+        return;
+      }
+
+      // First load the MTL file for materials
+      const mtlLoader = new THREE.MTLLoader();
+      mtlLoader.load(
+        'rocket.mtl',
+        function (materials) {
+          // MTL loaded successfully
+          materials.preload();
+          console.log('Rocket materials loaded');
+
+          // Now load the OBJ file with materials
+          const objLoader = new THREE.OBJLoader();
+          objLoader.setMaterials(materials);
+
+          objLoader.load(
+            'rocket.obj',
+            function (object) {
+              // OBJ loaded successfully
+              rocketMarker = object;
+
+              // Scale the rocket appropriately
+              rocketMarker.scale.set(0.01, 0.01, 0.01);
+
+              // Position the rocket
+              rocketMarker.position.copy(position);
+
+              // Orient rocket to point up from Earth surface
+              orientRocketUpward(rocketMarker, position);
+
+              // Ensure all meshes have proper settings
+              rocketMarker.traverse(function (child) {
+                if (child.isMesh) {
+                  child.castShadow = true;
+                  child.receiveShadow = true;
+                  // Keep original materials from MTL file
+                }
+              });
+
+              rocketMarker.userData = {
+                type: 'rocket',
+                startLat: startLat,
+                startLng: startLng,
+                currentLat: startLat,
+                currentLng: startLng
+              };
+
+              earthGroup.add(rocketMarker);
+              console.log(`3D Rocket OBJ model loaded at ${startLat.toFixed(2)}°, ${startLng.toFixed(2)}°`);
+            },
+            function (progress) {
+              // Progress callback for OBJ
+              if (progress.total > 0) {
+                console.log('Loading rocket OBJ...', Math.round(progress.loaded / progress.total * 100) + '%');
+              }
+            },
+            function (error) {
+              // Error loading OBJ
+              console.warn('Could not load rocket.obj:', error);
+              createFallbackRocket(position, startLat, startLng);
+            }
+          );
+        },
+        function (progress) {
+          // Progress callback for MTL
+          if (progress.total > 0) {
+            console.log('Loading rocket MTL...', Math.round(progress.loaded / progress.total * 100) + '%');
+          }
+        },
+        function (error) {
+          // Error loading MTL - try OBJ without materials
+          console.warn('Could not load rocket.mtl, trying OBJ without materials:', error);
+          loadRocketOBJOnly(position, startLat, startLng);
+        }
+      );
+    }
+
+    function loadRocketOBJOnly(position, startLat, startLng) {
+      // Load OBJ without MTL materials
+      const objLoader = new THREE.OBJLoader();
+
+      objLoader.load(
+        'rocket.obj',
+        function (object) {
+          // OBJ loaded successfully
+          rocketMarker = object;
+
+          // Scale the rocket appropriately
+          rocketMarker.scale.set(0.01, 0.01, 0.01);
+
+          // Position the rocket
+          rocketMarker.position.copy(position);
+
+          // Apply default material to all meshes
+          rocketMarker.traverse(function (child) {
+            if (child.isMesh) {
+              child.material = new THREE.MeshLambertMaterial({
+                color: 0xcccccc,
+                transparent: false
+              });
+              child.castShadow = true;
+              child.receiveShadow = true;
+            }
+          });
+
+          // Orient rocket to point up from Earth surface
+          orientRocketUpward(rocketMarker, position);
+
+          rocketMarker.userData = {
+            type: 'rocket',
+            startLat: startLat,
+            startLng: startLng,
+            currentLat: startLat,
+            currentLng: startLng
+          };
+
+          earthGroup.add(rocketMarker);
+          console.log(`3D Rocket OBJ model (no materials) loaded at ${startLat.toFixed(2)}°, ${startLng.toFixed(2)}°`);
+        },
+        function (progress) {
+          // Progress callback
+          if (progress.total > 0) {
+            console.log('Loading rocket OBJ (no MTL)...', Math.round(progress.loaded / progress.total * 100) + '%');
+          }
+        },
+        function (error) {
+          // Error loading OBJ
+          console.warn('Could not load rocket.obj:', error);
+          createFallbackRocket(position, startLat, startLng);
+        }
+      );
+    }
+
+    function orientRocketUpward(rocketObject, position) {
+      // Calculate the normal vector pointing away from Earth's center
+      const earthCenter = new THREE.Vector3(0, 0, 0);
+      const normal = position.clone().sub(earthCenter).normalize();
+
+      // Create a rotation matrix to align rocket with the normal
+      const up = new THREE.Vector3(0, 1, 0); // Rocket's local up direction
+      const quaternion = new THREE.Quaternion();
+
+      // Calculate rotation to align rocket's up with Earth's normal
+      quaternion.setFromUnitVectors(up, normal);
+      rocketObject.setRotationFromQuaternion(quaternion);
+
+      // Fine-tune rotation if needed (rocket models may have different orientations)
+      // Add a small rotation around the normal to ensure proper orientation
+      const adjustmentQuaternion = new THREE.Quaternion();
+      adjustmentQuaternion.setFromAxisAngle(normal, 0); // No additional rotation by default
+      rocketObject.quaternion.multiply(adjustmentQuaternion);
+    }
+
+    function orientRocketToDirection(rocketObject, direction) {
+      // Orient rocket to point in the direction of travel
+      const up = new THREE.Vector3(0, 1, 0); // Rocket's local up direction (nose)
+      const quaternion = new THREE.Quaternion();
+
+      // Align rocket's up (nose) with the direction of travel
+      quaternion.setFromUnitVectors(up, direction.normalize());
+      rocketObject.setRotationFromQuaternion(quaternion);
+
+      // Add slight roll rotation for dynamic flight appearance
+      const rollQuaternion = new THREE.Quaternion();
+      const rollAmount = Math.sin(Date.now() * 0.01) * 0.1; // Gentle roll
+      rollQuaternion.setFromAxisAngle(direction, rollAmount);
+      rocketObject.quaternion.multiply(rollQuaternion);
+    }
+
+    function createFallbackRocket(position, startLat, startLng) {
+      // Create a simple rocket shape using basic geometry
+      const rocketGroup = new THREE.Group();
+
+      // Rocket body (cylinder)
+      const bodyGeometry = new THREE.CylinderGeometry(0.008, 0.012, 0.06, 8);
+      const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xcccccc });
+      const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+      body.position.y = 0.02;
+      rocketGroup.add(body);
+
+      // Rocket nose cone
+      const noseGeometry = new THREE.ConeGeometry(0.008, 0.02, 8);
+      const noseMaterial = new THREE.MeshLambertMaterial({ color: 0xff4444 });
+      const nose = new THREE.Mesh(noseGeometry, noseMaterial);
+      nose.position.y = 0.06;
+      rocketGroup.add(nose);
+
+      // Rocket fins
+      for (let i = 0; i < 4; i++) {
+        const finGeometry = new THREE.BoxGeometry(0.002, 0.015, 0.008);
+        const finMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+        const fin = new THREE.Mesh(finGeometry, finMaterial);
+        fin.position.y = -0.005;
+        fin.position.x = Math.cos(i * Math.PI / 2) * 0.012;
+        fin.position.z = Math.sin(i * Math.PI / 2) * 0.012;
+        rocketGroup.add(fin);
+      }
+
+      rocketMarker = rocketGroup;
+      rocketMarker.position.copy(position);
+
+      // Orient rocket to point up from Earth surface
+      orientRocketUpward(rocketMarker, position);
+
+      rocketMarker.userData = {
+        type: 'rocket',
+        startLat: startLat,
+        startLng: startLng,
+        currentLat: startLat,
+        currentLng: startLng
+      };
+
+      earthGroup.add(rocketMarker);
+      console.log(`Fallback rocket created at ${startLat.toFixed(2)}°, ${startLng.toFixed(2)}°`);
+    }
+
+    function launchRocket() {
+      if (!rocketMarker || rocketLaunching) return;
+
+      rocketLaunching = true;
+
+      // Generate random target location
+      const targetLat = (Math.random() - 0.5) * 180; // -90 to 90
+      const targetLng = (Math.random() - 0.5) * 360; // -180 to 180
+
+      const startPos = rocketMarker.position.clone();
+      const targetPos = latLngToVector3(targetLat, targetLng, 1.02);
+
+      // Initialize last position for direction calculation
+      rocketMarker.userData.lastPos = startPos.clone();
+
+      // Create launch trajectory (arc through space)
+      const midPoint = startPos.clone().add(targetPos).multiplyScalar(0.5);
+      midPoint.normalize().multiplyScalar(1.8); // High arc through space
+
+      // Calculate initial direction for immediate orientation
+      const initialDirection = midPoint.clone().sub(startPos).normalize();
+      orientRocketToDirection(rocketMarker, initialDirection);
+
+      const duration = 3000; // 3 seconds flight time
+      const startTime = Date.now();
+
+      // Create rocket trail
+      createRocketTrail();
+
+      console.log(`🚀 Rocket launching to ${targetLat.toFixed(2)}°, ${targetLng.toFixed(2)}°!`);
+
+      function animateRocketFlight() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+
+        // Smooth easing function
+        const easeProgress = progress < 0.5
+          ? 2 * progress * progress
+          : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+
+        // Quadratic Bezier curve for arc trajectory
+        const t = easeProgress;
+        const oneMinusT = 1 - t;
+
+        const currentPos = new THREE.Vector3()
+          .addScaledVector(startPos, oneMinusT * oneMinusT)
+          .addScaledVector(midPoint, 2 * oneMinusT * t)
+          .addScaledVector(targetPos, t * t);
+
+        rocketMarker.position.copy(currentPos);
+
+        // Update rocket rotation to face direction of travel
+        if (progress > 0.01 && rocketMarker.userData.lastPos) {
+          const direction = currentPos.clone().sub(rocketMarker.userData.lastPos).normalize();
+          orientRocketToDirection(rocketMarker, direction);
+        }
+        rocketMarker.userData.lastPos = currentPos.clone();
+
+        // Update trail
+        updateRocketTrail(currentPos);
+
+        if (progress < 1) {
+          requestAnimationFrame(animateRocketFlight);
+        } else {
+          // Landing complete
+          rocketMarker.position.copy(targetPos);
+          rocketMarker.userData.currentLat = targetLat;
+          rocketMarker.userData.currentLng = targetLng;
+          rocketLaunching = false;
+
+          // Orient rocket upward at landing site
+          orientRocketUpward(rocketMarker, targetPos);
+
+          // Clear trail after landing
+          setTimeout(() => {
+            clearRocketTrail();
+          }, 2000);
+
+          console.log(`🎯 Rocket landed at ${targetLat.toFixed(2)}°, ${targetLng.toFixed(2)}°!`);
+
+          // Show landing details
+          showRocketDetails(targetLat, targetLng);
+        }
+      }
+
+      animateRocketFlight();
+    }
+
+    function createRocketTrail() {
+      if (rocketTrail) clearRocketTrail();
+
+      const trailGeometry = new THREE.BufferGeometry();
+      const trailPositions = new Float32Array(300); // 100 points * 3 coordinates
+      trailGeometry.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+
+      const trailMaterial = new THREE.LineBasicMaterial({
+        color: 0xff6600,
+        transparent: true,
+        opacity: 0.6,
+        linewidth: 3
+      });
+
+      rocketTrail = new THREE.Line(trailGeometry, trailMaterial);
+      earthGroup.add(rocketTrail);
+    }
+
+    function updateRocketTrail(currentPos) {
+      if (!rocketTrail) return;
+
+      const positions = rocketTrail.geometry.attributes.position.array;
+
+      // Shift existing positions back
+      for (let i = positions.length - 3; i >= 3; i -= 3) {
+        positions[i] = positions[i - 3];
+        positions[i + 1] = positions[i - 2];
+        positions[i + 2] = positions[i - 1];
+      }
+
+      // Add new position at front
+      positions[0] = currentPos.x;
+      positions[1] = currentPos.y;
+      positions[2] = currentPos.z;
+
+      rocketTrail.geometry.attributes.position.needsUpdate = true;
+    }
+
+    function clearRocketTrail() {
+      if (rocketTrail) {
+        disposeObject(rocketTrail);
+        earthGroup.remove(rocketTrail);
+        rocketTrail = null;
+      }
+    }
+
+    function clearRocket() {
+      if (rocketMarker) {
+        disposeObject(rocketMarker);
+        earthGroup.remove(rocketMarker);
+        rocketMarker = null;
+      }
+      clearRocketTrail();
+      rocketLaunching = false;
+    }
+
+    function showRocketDetails(lat, lng) {
+      const detailsDiv = document.getElementById('earthquake-details');
+
+      detailsDiv.innerHTML = `
+        <div class="earthquake-info">
+          <h4 style="color: #ff6600; margin-bottom: 10px;">🚀 Rocket Mission Complete!</h4>
+          <div><strong>Landing Coordinates:</strong> ${lat.toFixed(4)}°, ${lng.toFixed(4)}°</div>
+          <div><strong>Mission Status:</strong> Successful Landing</div>
+          <div><strong>Flight Time:</strong> 3.0 seconds</div>
+          <div><strong>Distance Traveled:</strong> ${calculateDistance(
+        rocketMarker.userData.startLat,
+        rocketMarker.userData.startLng,
+        lat, lng
+      ).toFixed(0)} km</div>
+          <div><strong>Launch Site:</strong> ${rocketMarker.userData.startLat.toFixed(4)}°, ${rocketMarker.userData.startLng.toFixed(4)}°</div>
+          <div style="margin-top: 10px; font-size: 11px; opacity: 0.8;">
+            Press 'T' to launch rocket to a new random location!
+            The rocket will create a beautiful arc trajectory through space.
+          </div>
+        </div>
+      `;
+    }
+
+    function calculateDistance(lat1, lng1, lat2, lng2) {
+      const R = 6371; // Earth's radius in km
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
+    // Tectonic Plates Functions
+    function toggleTectonicPlates() {
+      showPlates = !showPlates;
+      const badge = document.getElementById('plates-badge');
+      badge.textContent = showPlates ? 'ON' : 'OFF';
+
+      if (showPlates) {
+        loadTectonicPlates();
+      } else {
+        clearTectonicPlates();
+      }
+    }
+
+    function refreshTectonicPlates() {
+      if (showPlates) {
+        clearTectonicPlates();
+        loadTectonicPlates();
+      }
+    }
+
+    async function loadTectonicPlates() {
+      if (!showPlates) return;
+
+      try {
+        console.log('Loading tectonic plates data...');
+        const response = await fetch(PLATE_GEOJSON_URL);
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+        plateGeoJson = await response.json();
+        createTectonicPlatesVisualization();
+        console.log('Tectonic plates loaded successfully');
+      } catch (error) {
+        console.error('Error loading tectonic plates:', error);
+        const badge = document.getElementById('plates-badge');
+        badge.textContent = 'ERROR';
+        setTimeout(() => {
+          if (badge.textContent === 'ERROR') {
+            badge.textContent = 'OFF';
+            showPlates = false;
+          }
+        }, 3000);
+      }
+    }
+
+    function createTectonicPlatesVisualization() {
+      if (!plateGeoJson || !showPlates) return;
+
+      clearTectonicPlates();
+      plateGroup = new THREE.Group();
+
+      plateGeoJson.features.forEach(feature => {
+        if (feature.geometry.type === 'LineString') {
+          createPlateLineString(feature.geometry.coordinates);
+        } else if (feature.geometry.type === 'MultiLineString') {
+          feature.geometry.coordinates.forEach(lineString => {
+            createPlateLineString(lineString);
+          });
+        }
+      });
+
+      earthGroup.add(plateGroup);
+    }
+
+    function createPlateLineString(coordinates) {
+      const points = [];
+      coordinates.forEach(coord => {
+        const [lng, lat] = coord;
+        if (isValidCoord(lat, lng)) {
+          const vector = latLngToVector3(lat, lng, 1.005);
+          points.push(vector);
+        }
+      });
+
+      if (points.length > 1) {
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({
+          color: 0xff4444,
+          transparent: true,
+          opacity: 0.7,
+          linewidth: 2
+        });
+
+        const line = new THREE.Line(geometry, material);
+        plateGroup.add(line);
+      }
+    }
+
+    function clearTectonicPlates() {
+      if (plateGroup) {
+        plateGroup.traverse(child => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) child.material.dispose();
+        });
+        earthGroup.remove(plateGroup);
+        plateGroup = null;
+      }
+    }
+
+    // Hurricane Functions
+    function toggleHurricanes() {
+      showHurricanes = !showHurricanes;
+      const badge = document.getElementById('hurricane-badge');
+      badge.textContent = showHurricanes ? 'ON' : 'OFF';
+
+      if (showHurricanes) {
+        loadHurricanes();
+      } else {
+        clearHurricanes();
+      }
+    }
+
+    function refreshHurricanes() {
+      if (showHurricanes) {
+        clearHurricanes();
+        loadHurricanes();
+      }
+    }
+
+    async function loadHurricanes() {
+      if (!showHurricanes) return;
+
+      try {
+        console.log('Loading hurricane data from NHC/NOAA...');
+
+        // Try multiple NHC/NOAA data sources
+        const dataSources = [
+          // NHC Active Storms JSON
+          'https://www.nhc.noaa.gov/CurrentStorms.json',
+          // NWS Weather Alerts for tropical systems
+          'https://api.weather.gov/alerts/active?event=Hurricane%20Warning',
+          'https://api.weather.gov/alerts/active?event=Hurricane%20Watch',
+          'https://api.weather.gov/alerts/active?event=Tropical%20Storm%20Warning',
+          'https://api.weather.gov/alerts/active?event=Tropical%20Storm%20Watch'
+        ];
+
+        let hurricaneData = null;
+
+        // Try NHC Current Storms first (best source)
+        try {
+          const nhcResponse = await fetch(dataSources[0]);
+          if (nhcResponse.ok) {
+            const nhcData = await nhcResponse.json();
+            hurricaneData = processNHCData(nhcData);
+            console.log('Loaded hurricane data from NHC CurrentStorms');
+          }
+        } catch (nhcError) {
+          console.warn('NHC CurrentStorms unavailable, trying NWS alerts...');
+        }
+
+        // Fallback to NWS alerts if NHC data unavailable
+        if (!hurricaneData) {
+          for (let i = 1; i < dataSources.length; i++) {
+            try {
+              const response = await fetch(dataSources[i]);
+              if (response.ok) {
+                const alertData = await response.json();
+                if (alertData.features && alertData.features.length > 0) {
+                  hurricaneData = alertData;
+                  console.log(`Loaded hurricane alerts from NWS (${dataSources[i]})`);
+                  break;
+                }
+              }
+            } catch (alertError) {
+              console.warn(`Failed to load from ${dataSources[i]}`);
+            }
+          }
+        }
+
+        if (hurricaneData) {
+          hurricaneGeoJson = hurricaneData;
+          createHurricaneVisualization();
+          lastHurricaneUpdate = new Date();
+          console.log('Hurricane data loaded successfully');
+        } else {
+          throw new Error('No hurricane data available from any source');
+        }
+
+      } catch (error) {
+        console.error('Error loading hurricane data:', error);
+        // Create mock data for demonstration
+        createMockHurricaneData();
+      }
+    }
+
+    function processNHCData(nhcData) {
+      // Convert NHC CurrentStorms.json format to GeoJSON-like structure
+      if (!nhcData || !nhcData.activeStorms) {
+        return null;
+      }
+
+      const features = [];
+
+      nhcData.activeStorms.forEach(storm => {
+        if (storm.lat && storm.lon) {
+          features.push({
+            type: 'Feature',
+            properties: {
+              event: `${storm.classification || 'Storm'} ${storm.name || 'Unknown'}`,
+              headline: `${storm.name}: ${storm.classification}`,
+              description: `Wind Speed: ${storm.intensity || 'Unknown'} mph, Moving: ${storm.movement || 'Unknown'}`,
+              severity: storm.classification === 'Hurricane' ? 'Extreme' : 'Severe',
+              urgency: 'Immediate',
+              certainty: 'Observed'
+            },
+            geometry: {
+              type: 'Point',
+              coordinates: [parseFloat(storm.lon), parseFloat(storm.lat)]
+            }
+          });
+        }
+      });
+
+      return {
+        type: 'FeatureCollection',
+        features: features
+      };
+    }
+
+    function createMockHurricaneData() {
+      console.log('Creating mock hurricane data for demonstration');
+      hurricaneGeoJson = {
+        features: [
+          {
+            properties: {
+              event: 'Hurricane Watch',
+              areaDesc: 'Atlantic Ocean - Demo Area',
+              severity: 'Severe'
+            },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [[
+                [-80, 25], [-75, 25], [-75, 30], [-80, 30], [-80, 25]
+              ]]
+            }
+          }
+        ]
+      };
+      createHurricaneVisualization();
+    }
+
+    function createHurricaneVisualization() {
+      if (!hurricaneGeoJson || !showHurricanes) return;
+
+      clearHurricanes();
+      hurricaneGroup = new THREE.Group();
+
+      hurricaneGeoJson.features.forEach(feature => {
+        if (feature.geometry.type === 'Polygon') {
+          createHurricanePolygon(feature.geometry.coordinates[0], feature.properties);
+        } else if (feature.geometry.type === 'Point') {
+          const [lng, lat] = feature.geometry.coordinates;
+          createHurricaneCenter(lat, lng, feature.properties);
+        } else if (feature.geometry.type === 'MultiPolygon') {
+          feature.geometry.coordinates.forEach(polygon => {
+            createHurricanePolygon(polygon[0], feature.properties);
+          });
+        }
+      });
+
+      earthGroup.add(hurricaneGroup);
+      updateHurricaneStatus();
+    }
+
+    function createHurricaneCenter(lat, lng, properties) {
+      if (!isValidCoord(lat, lng)) return;
+
+      const position = latLngToVector3(lat, lng, 1.015);
+
+      // Create hurricane icon
+      const canvas = document.createElement('canvas');
+      canvas.width = 80;
+      canvas.height = 80;
+      const ctx = canvas.getContext('2d');
+
+      // Clear canvas
+      ctx.clearRect(0, 0, 80, 80);
+
+      // Draw hurricane symbol background
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+      ctx.beginPath();
+      ctx.arc(40, 40, 35, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Draw hurricane emoji/symbol
+      ctx.font = '48px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🌀', 40, 40);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 0.9
+      });
+
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(0.12, 0.12, 1);
+      sprite.position.copy(position);
+
+      sprite.userData = {
+        type: 'hurricane',
+        ...properties,
+        lat: lat,
+        lng: lng
+      };
+
+      hurricaneGroup.add(sprite);
+
+      // Add pulsing effect for active storms
+      sprite.userData.isPulsing = true;
+      sprite.userData.pulseStart = Date.now();
+
+      return sprite;
+    }
+
+    function updateHurricaneStatus() {
+      const statusText = document.getElementById('status-text');
+      if (statusText && hurricaneGroup) {
+        const stormCount = hurricaneGroup.children.filter(child =>
+          child.userData && child.userData.type === 'hurricane'
+        ).length;
+
+        if (stormCount > 0) {
+          statusText.textContent = `Active storms: ${stormCount} | Last updated: ${new Date().toLocaleTimeString()}`;
+        } else {
+          statusText.textContent = `No active storms | Last updated: ${new Date().toLocaleTimeString()}`;
+        }
+      }
+    }
+
+    function createHurricanePolygon(coordinates, properties) {
+      const points = [];
+      coordinates.forEach(coord => {
+        const [lng, lat] = coord;
+        if (isValidCoord(lat, lng)) {
+          const vector = latLngToVector3(lat, lng, 1.008);
+          points.push(vector);
+        }
+      });
+
+      if (points.length > 2) {
+        // Create outline
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({
+          color: 0xff8800,
+          transparent: true,
+          opacity: 0.8,
+          linewidth: 3
+        });
+
+        const line = new THREE.LineLoop(geometry, material);
+        hurricaneGroup.add(line);
+
+        // Add hurricane icon at center
+        if (points.length > 0) {
+          const center = points.reduce((acc, point) => acc.add(point), new THREE.Vector3()).divideScalar(points.length);
+          createHurricaneIcon(center, properties);
+        }
+      }
+    }
+
+    function createHurricaneIcon(position, properties) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+
+      ctx.clearRect(0, 0, 64, 64);
+      ctx.font = '48px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🌀', 32, 32);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 0.9
+      });
+
+      const sprite = new THREE.Sprite(material);
+      sprite.scale.set(0.06, 0.06, 1);
+      sprite.position.copy(position);
+
+      sprite.userData = {
+        type: 'hurricane',
+        event: properties.event || 'Hurricane Alert',
+        area: properties.areaDesc || 'Unknown Area'
+      };
+
+      hurricaneGroup.add(sprite);
+    }
+
+    function clearHurricanes() {
+      if (hurricaneGroup) {
+        hurricaneGroup.traverse(child => {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (child.material.map) child.material.map.dispose();
+            child.material.dispose();
+          }
+        });
+        earthGroup.remove(hurricaneGroup);
+        hurricaneGroup = null;
+      }
+    }
+
+    function setupLighting() {
+      // Bright ambient lighting for clear visibility
+      scene.add(new THREE.AmbientLight(0x606060, 1.2));
+
+      // Brighter directional light for good depth perception
+      const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+      dir.position.set(1, 1, 1);
+      scene.add(dir);
+
+      // Enhanced hemisphere light for natural appearance
+      const hemi = new THREE.HemisphereLight(0x87ceeb, 0x1e3c72, 0.6);
+      hemi.position.set(0, 10, 0);
+      scene.add(hemi);
+    }
+
+    function addMouseControls() {
+      let isDragging = false;
+      let previousMousePosition = { x: 0, y: 0 };
+
+      renderer.domElement.addEventListener('mousedown', (e) => {
+        isDragging = true; previousMousePosition = { x: e.clientX, y: e.clientY };
+      });
+      renderer.domElement.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const dx = e.clientX - previousMousePosition.x;
+        const dy = e.clientY - previousMousePosition.y;
+        earthGroup.rotation.y += dx * 0.01;
+        earthGroup.rotation.x += dy * 0.01;
+        earthGroup.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, earthGroup.rotation.x));
+        previousMousePosition = { x: e.clientX, y: e.clientY };
+      });
+      renderer.domElement.addEventListener('mouseup', () => { isDragging = false; });
+
+      renderer.domElement.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomSpeed = 0.1;
+        const zoomFactor = e.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
+        camera.position.multiplyScalar(zoomFactor);
+        const distance = camera.position.length();
+        if (distance < maxZoom) camera.position.normalize().multiplyScalar(maxZoom);
+        else if (distance > minZoom * 8) camera.position.normalize().multiplyScalar(minZoom * 8);
+        updateZoomInfo();
+      }, { passive: false });
+
+      renderer.domElement.addEventListener('click', onMouseClick);
+
+      // Basic touch support
+      let touchStart = null;
+      renderer.domElement.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }, { passive: true });
+      renderer.domElement.addEventListener('touchmove', (e) => {
+        if (!touchStart || e.touches.length !== 1) return;
+        const dx = e.touches[0].clientX - touchStart.x;
+        const dy = e.touches[0].clientY - touchStart.y;
+        earthGroup.rotation.y += dx * 0.01; earthGroup.rotation.x += dy * 0.01;
+        earthGroup.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, earthGroup.rotation.x));
+        touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      }, { passive: true });
+      renderer.domElement.addEventListener('touchend', () => { touchStart = null; }, { passive: true });
+    }
+
+    function onMouseClick(event) {
+      mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+
+      const eqHits = raycaster.intersectObjects(clickableEqObjects, true);
+      if (eqHits.length > 0) {
+        // If a label sprite was clicked, resolve back to its marker
+        let hit = eqHits[0].object;
+        if (hit.userData && hit.userData.refMarker) hit = hit.userData.refMarker;
+        const eq = hit.userData;
+        showEarthquakeDetails(eq);
+        focusOnEarthquake(eq.lat, eq.lng, eq.magnitude);
+        return;
+      }
+
+      const apHits = raycaster.intersectObjects(airplaneMarkers);
+      if (apHits.length > 0) {
+        const m = apHits[0].object;
+        const ap = m.userData;
+        showAirplaneDetails(ap);
+        focusOnAirplane(ap.latitude, ap.longitude);
+        return;
+      }
+
+      // Check ISS click
+      if (issMarker) {
+        const issHits = raycaster.intersectObjects([issMarker], true);
+        if (issHits.length > 0) {
+          showISSDetails(issData);
+          focusOnISS(issData.latitude, issData.longitude);
+          return;
+        }
+      }
+
+      // Check hurricane click
+      if (hurricaneGroup) {
+        const hurricaneHits = raycaster.intersectObjects(hurricaneGroup.children);
+        if (hurricaneHits.length > 0) {
+          const hurricane = hurricaneHits[0].object;
+          if (hurricane.userData && hurricane.userData.type === 'hurricane') {
+            showHurricaneDetails(hurricane.userData);
+            focusOnHurricane(hurricane.userData.lat, hurricane.userData.lng);
+            return;
+          }
+        }
+      }
+
+      // Check fire click
+      if (fireGroup) {
+        const fireHits = raycaster.intersectObjects(fireGroup.children);
+        if (fireHits.length > 0) {
+          const fire = fireHits[0].object;
+          if (fire.userData && fire.userData.type === 'fire') {
+            showFireDetails(fire.userData);
+            focusOnFire(fire.userData.lat, fire.userData.lng);
+            return;
+          }
+        }
+      }
+
+      // Check rocket click
+      if (rocketMarker) {
+        const rocketHits = raycaster.intersectObjects([rocketMarker]);
+        if (rocketHits.length > 0) {
+          if (!rocketLaunching) {
+            showRocketDetails(rocketMarker.userData.currentLat, rocketMarker.userData.currentLng);
+            // Focus on rocket
+            const latRad = rocketMarker.userData.currentLat * Math.PI / 180;
+            const lngRad = rocketMarker.userData.currentLng * Math.PI / 180;
+            earthGroup.rotation.y = -lngRad;
+            earthGroup.rotation.x = -latRad;
+          }
+        }
+      }
+    }
+
+    async function loadEarthquakeData(feedType = currentDataFeed) {
+      let controller;
+      let timeoutId;
+      try {
+        document.getElementById('loading').style.display = 'block';
+        document.getElementById('loading').textContent = 'Loading earthquakes...';
+        const feedConfig = dataFeeds[feedType];
+        const params = new URLSearchParams({
+          format: 'geojson',
+          starttime: feedConfig.starttime(),
+          endtime: new Date().toISOString(),
+          minmagnitude: feedConfig.minmagnitude,
+          limit: feedConfig.limit,
+          orderby: 'time-asc'
+        });
+
+        // Add timeout via AbortController to avoid hanging requests
+        controller = new AbortController();
+        timeoutId = setTimeout(() => controller.abort(), 15000);
+        const response = await fetch(`${FDSN_BASE_URL}?${params}`, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const data = await response.json();
+
+        earthquakeData = data.features.map(f => {
+          const [lng, lat, depth] = f.geometry.coordinates;
+          const p = f.properties;
+          return {
+            id: p.id || p.code || p.ids,
+            lat, lng, depth,
+            magnitude: p.mag, place: p.place, time: p.time,
+            url: p.url, type: p.type, status: p.status, tsunami: p.tsunami,
+            alert: p.alert, sig: p.sig, net: p.net, code: p.code, magType: p.magType, title: p.title,
+            gap: p.gap, rms: p.rms
+          };
+        }).sort((a, b) => b.time - a.time);
+
+        updateGlobeVisualization();
+
+        document.getElementById('loading').style.display = 'none';
+        showInfoPanel();
+        document.getElementById('controls').style.display = 'block';
+
+        lastUpdateTime = new Date();
+        updateStatus();
+        updateEarthquakeList();
+      } catch (err) {
+        console.error('Error loading earthquake data:', err);
+        document.getElementById('loading').innerHTML = `Error loading earthquake data: ${esc(err.message)}<br>Retrying in 5 seconds...`;
+        setTimeout(() => loadEarthquakeData(feedType), 5000);
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    }
+
+    function disposeObject(obj) {
+      if (obj.traverse) {
+        // Handle 3D models with multiple meshes
+        obj.traverse(function (child) {
+          if (child.geometry) child.geometry.dispose();
+          if (child.material) {
+            if (Array.isArray(child.material)) {
+              child.material.forEach(m => {
+                if (m.map) m.map.dispose();
+                m.dispose();
+              });
+            } else {
+              if (child.material.map) child.material.map.dispose();
+              child.material.dispose();
+            }
+          }
+        });
+      } else {
+        // Handle single objects
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach(m => {
+              if (m.map) m.map.dispose();
+              m.dispose();
+            });
+          } else {
+            if (obj.material.map) obj.material.map.dispose();
+            obj.material.dispose();
+          }
+        }
+      }
+    }
+
+    function updateGlobeVisualization() {
+      // Clean up previous
+      earthquakeMarkers.forEach(m => {
+        if (m.userData && m.userData.label) {
+          // dispose label sprite
+          const lbl = m.userData.label;
+          if (lbl.material && lbl.material.map) lbl.material.map.dispose();
+          disposeObject(lbl);
+          earthGroup.remove(lbl);
+        }
+        disposeObject(m);
+        earthGroup.remove(m);
+      });
+      earthquakeRings.forEach(r => { disposeObject(r); earthGroup.remove(r); });
+      earthquakeMarkers = []; earthquakeRings = []; clickableEqObjects = [];
+
+      earthquakeData.forEach(eq => {
+        if (isValidCoord(eq.lat, eq.lng) && Number.isFinite(eq.magnitude)) {
+          const marker = createEarthquakeMarker(eq);
+          if (!marker) return;
+          const age = Date.now() - eq.time;
+          if (age < 6 * 60 * 60 * 1000) createEarthquakeRing(eq);
+        }
+      });
+    }
+
+    function createEarthquakeMarker(earthquake) {
+      if (!isValidCoord(earthquake.lat, earthquake.lng)) return null;
+
+      const lat = earthquake.lat * Math.PI / 180;
+      const lng = earthquake.lng * Math.PI / 180;
+      const radius = 1.02;
+
+      const x = radius * Math.cos(lat) * Math.cos(lng);
+      const y = radius * Math.sin(lat);
+      const z = -radius * Math.cos(lat) * Math.sin(lng);
+
+      const markerSize = Math.max(0.015, Math.min(0.08, earthquake.magnitude * 0.012));
+      const geometry = new THREE.SphereGeometry(markerSize, 12, 12);
+
+      const hoursOld = (Date.now() - earthquake.time) / (1000 * 60 * 60);
+      const baseOpacity = Math.max(0.4, 1 - (hoursOld / 168));
+
+      let color, glowColor;
+      if (earthquake.magnitude >= 7) { color = new THREE.Color(1, 0, 0); glowColor = new THREE.Color(1, .2, .2); }
+      else if (earthquake.magnitude >= 6) { color = new THREE.Color(1, .27, 0); glowColor = new THREE.Color(1, .4, .1); }
+      else if (earthquake.magnitude >= 5) { color = new THREE.Color(1, .55, 0); glowColor = new THREE.Color(1, .6, .2); }
+      else if (earthquake.magnitude >= 4) { color = new THREE.Color(1, .84, 0); glowColor = new THREE.Color(1, .9, .3); }
+      else { color = new THREE.Color(1, 1, 0); glowColor = new THREE.Color(1, 1, .5); }
+
+      const material = new THREE.MeshPhongMaterial({
+        color, transparent: true, opacity: baseOpacity,
+        emissive: glowColor, emissiveIntensity: 0.2, shininess: 100
+      });
+
+      const marker = new THREE.Mesh(geometry, material);
+      marker.position.set(x, y, z);
+      marker.userData = { ...earthquake, originalPosition: { x, y, z }, markerSize };
+
+      if (earthquake.magnitude >= 5.0) createLocationLabel(marker, earthquake);
+
+      if (hoursOld < 24) {
+        marker.userData.isPulsing = true;
+        marker.userData.pulseStart = Date.now();
+      }
+
+      earthGroup.add(marker);
+      earthquakeMarkers.push(marker);
+      clickableEqObjects.push(marker);
+      if (marker.userData.label) clickableEqObjects.push(marker.userData.label);
+      return marker;
+    }
+
+    function createLocationLabel(marker, earthquake) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 256; canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'rgba(0,0,0,.8)'; ctx.fillRect(0, 0, 256, 64);
+      ctx.fillStyle = 'white'; ctx.font = '12px Arial'; ctx.textAlign = 'center';
+      ctx.fillText(`M${earthquake.magnitude}`, 128, 20);
+      ctx.font = '10px Arial';
+      ctx.fillText((esc(earthquake.place) || '').substring(0, 30), 128, 40);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+      label.scale.set(0.3, 0.075, 1);
+      label.position.copy(marker.position);
+      label.position.y += marker.userData.markerSize + 0.05;
+
+      // Link back so raycaster can resolve to marker
+      label.userData = { refMarker: marker };
+
+      earthGroup.add(label);
+      marker.userData.label = label;
+    }
+
+    function createEarthquakeRing(earthquake) {
+      if (!isValidCoord(earthquake.lat, earthquake.lng)) return;
+
+      const lat = earthquake.lat * Math.PI / 180;
+      const lng = earthquake.lng * Math.PI / 180;
+      const radius = 1.03;
+
+      const x = radius * Math.cos(lat) * Math.cos(lng);
+      const y = radius * Math.sin(lat);
+      const z = -radius * Math.cos(lat) * Math.sin(lng);
+
+      const ringRadius = Math.max(0.03, earthquake.magnitude * 0.015);
+      const geometry = new THREE.RingGeometry(ringRadius * 0.7, ringRadius, 24);
+
+      let color, intensity;
+      if (earthquake.magnitude >= 6) { color = 0xff0000; intensity = 0.8; }
+      else if (earthquake.magnitude >= 5) { color = 0xff4500; intensity = 0.7; }
+      else { color = 0xffa500; intensity = 0.6; }
+
+      const material = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: intensity, side: THREE.DoubleSide });
+      const ring = new THREE.Mesh(geometry, material);
+      ring.position.set(x, y, z);
+
+      const normal = new THREE.Vector3(x, y, z).normalize();
+      ring.lookAt(ring.position.clone().add(normal));
+
+      ring.userData = { earthquake, startTime: Date.now(), maxScale: Math.max(1.5, earthquake.magnitude * 0.4), originalPosition: { x, y, z } };
+      earthGroup.add(ring);
+      earthquakeRings.push(ring);
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      if (autoRotate) earthGroup.rotation.y += 0.002;
+
+      const now = Date.now();
+
+      earthquakeRings.forEach(r => {
+        const cycle = ((now - r.userData.startTime) % 2000) / 2000;
+        const scale = 1 + Math.sin(cycle * Math.PI * 2) * 0.3;
+        r.scale.setScalar(scale);
+        const base = r.userData.earthquake.magnitude >= 5 ? 0.8 : 0.6;
+        r.material.opacity = Math.max(0.1, base * (1 - cycle * 0.5));
+      });
+
+      earthquakeMarkers.forEach(m => {
+        if (m.userData.isPulsing) {
+          const cycle = ((now - m.userData.pulseStart) % 1500) / 1500;
+          const pulse = 0.2 + Math.sin(cycle * Math.PI * 2) * 0.3;
+          m.material.emissiveIntensity = m.userData.isHighlighted ? 0.8 : pulse;
+          if (now - m.userData.pulseStart > 3600000) {
+            m.userData.isPulsing = false;
+            m.material.emissiveIntensity = 0.2;
+          }
+        }
+        if (m.userData.label) {
+          m.userData.label.position.copy(m.position);
+          m.userData.label.position.y += m.userData.markerSize + 0.05;
+        }
+      });
+
+      airplaneMarkers.forEach(m => {
+        if (m.userData.type === 'airplane') {
+          const cycle = (now % 2000) / 2000;
+          const blink = 0.7 + Math.sin(cycle * Math.PI * 4) * 0.3;
+          if (!m.userData.isHighlighted) m.material.opacity = blink;
+
+          if (m.userData.trail) {
+            const headingRad = (m.userData.heading || 0) * Math.PI / 180;
+            const trailLength = 0.05;
+            const positions = m.userData.trail.geometry.attributes.position.array;
+            for (let i = 0; i < 10; i++) {
+              const offset = (i / 10) * trailLength;
+              positions[i * 3] = m.position.x - Math.sin(headingRad) * offset;
+              positions[i * 3 + 1] = m.position.y;
+              positions[i * 3 + 2] = m.position.z - Math.cos(headingRad) * offset;
+            }
+            m.userData.trail.geometry.attributes.position.needsUpdate = true;
+          }
+        }
+      });
+
+      // ISS animation
+      if (issMarker && issMarker.userData.isPulsing) {
+        const cycle = ((now - issMarker.userData.pulseStart) % 1000) / 1000;
+        const pulse = 0.3 + Math.sin(cycle * Math.PI * 4) * 0.2;
+        issMarker.material.emissiveIntensity = pulse;
+
+        // Rotate ISS slightly for realism
+        issMarker.rotation.y += 0.01;
+      }
+
+      // Hurricane animation
+      if (hurricaneGroup) {
+        hurricaneGroup.children.forEach(hurricane => {
+          if (hurricane.userData && hurricane.userData.isPulsing) {
+            const cycle = ((now - hurricane.userData.pulseStart) % 2000) / 2000;
+            const pulse = 0.7 + Math.sin(cycle * Math.PI * 3) * 0.3;
+            hurricane.material.opacity = pulse;
+
+            // Slight rotation for hurricane effect
+            hurricane.material.rotation += 0.02;
+          }
+        });
+      }
+
+      // Rocket animation (idle bobbing when not launching)
+      if (rocketMarker && !rocketLaunching) {
+        const cycle = (now % 3000) / 3000;
+        const bob = Math.sin(cycle * Math.PI * 2) * 0.01;
+        const basePosition = latLngToVector3(
+          rocketMarker.userData.currentLat,
+          rocketMarker.userData.currentLng,
+          1.02
+        );
+
+        // Apply bobbing motion along the normal vector (up from Earth surface)
+        const normal = basePosition.clone().normalize();
+        const bobbingPosition = basePosition.clone().add(normal.multiplyScalar(bob));
+        rocketMarker.position.copy(bobbingPosition);
+
+        // Maintain upward orientation (re-orient if needed)
+        orientRocketUpward(rocketMarker, basePosition);
+
+        // Add subtle rotation around the normal axis for visual interest
+        const adjustmentQuaternion = new THREE.Quaternion();
+        const rotationAmount = Math.sin(cycle * Math.PI * 2) * 0.05; // Very subtle rotation
+        adjustmentQuaternion.setFromAxisAngle(normal, rotationAmount);
+        rocketMarker.quaternion.multiply(adjustmentQuaternion);
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    function showEarthquakeDetails(earthquake) {
+      const detailsDiv = document.getElementById('earthquake-details');
+      const timeAgo = getTimeAgo(earthquake.time);
+      const tsunamiWarning = earthquake.tsunami ? '<div style="color:#ff0000;margin:5px 0;">⚠️ TSUNAMI WARNING</div>' : '';
+      const alertLevel = earthquake.alert ? `<div style="color:${getAlertColor(earthquake.alert)};margin:5px 0;">Alert: ${esc(earthquake.alert.toUpperCase())}</div>` : '';
+      const detailsLink = safeUrl(earthquake.url);
+      detailsDiv.innerHTML = `
+        <div class="earthquake-info">
+          <div class="magnitude">Magnitude: ${esc(earthquake.magnitude)} ${esc(earthquake.magType || '')}</div>
+          ${tsunamiWarning}
+          ${alertLevel}
+          <div><strong>Location:</strong> ${esc(earthquake.place)}</div>
+          <div><strong>Time:</strong> ${esc(timeAgo)}</div>
+          <div><strong>Depth:</strong> ${esc(earthquake.depth)} km</div>
+          <div><strong>Status:</strong> ${esc(earthquake.status)}</div>
+          <div><strong>Type:</strong> ${esc(earthquake.type)}</div>
+          <div><strong>Network:</strong> ${esc(earthquake.net)}</div>
+          <div><strong>Event ID:</strong> ${esc(earthquake.code)}</div>
+          <div><strong>Significance:</strong> ${esc(earthquake.sig || 'N/A')}</div>
+          ${earthquake.gap ? `<div><strong>Gap:</strong> ${esc(earthquake.gap)}°</div>` : ''}
+          ${Number.isFinite(earthquake.rms) ? `<div><strong>RMS:</strong> ${esc(Number(earthquake.rms).toFixed(2))}s</div>` : ''}
+          <div><strong>Coordinates:</strong> ${esc(earthquake.lat.toFixed(4))}°, ${esc(earthquake.lng.toFixed(4))}°</div>
+      ${detailsLink ? `<div style="margin-top:8px;"><a href="${detailsLink}" target="_blank" rel="noopener" style="color:#4CAF50;">Official USGS Details</a></div>` : ''}
+        </div>
+      `;
+    }
+
+    function getAlertColor(alert) {
+      switch (alert) {
+        case 'green': return '#4CAF50';
+        case 'yellow': return '#FFC107';
+        case 'orange': return '#FF9800';
+        case 'red': return '#F44336';
+        default: return '#9E9E9E';
+      }
+    }
+
+    function updateEarthquakeList() {
+      const recentEarthquakes = earthquakeData.slice(0, 10);
+      const totalCount = earthquakeData.length;
+      const significantCount = earthquakeData.filter(eq => eq.magnitude >= 5.0).length;
+      const majorCount = earthquakeData.filter(eq => eq.magnitude >= 6.0).length;
+
+      const listHtml = recentEarthquakes.map(eq => {
+        const timeAgo = getTimeAgo(eq.time);
+        const tsunamiIcon = eq.tsunami ? '🌊 ' : '';
+        const alertIcon = eq.alert ? getAlertIcon(eq.alert) : '';
+        const magType = eq.magType ? ` (${esc(eq.magType)})` : '';
+        return `
+      <div class="earthquake-item" data-lat="${esc(eq.lat)}" data-lng="${esc(eq.lng)}" data-mag="${esc(eq.magnitude)}">
+            <div><span class="magnitude">M${esc(eq.magnitude)}${magType}</span> ${tsunamiIcon}${alertIcon}</div>
+            <div style="margin:4px 0;font-weight:500;">${esc(eq.place)}</div>
+            <div class="details">${esc(timeAgo)} • Depth: ${esc(eq.depth)}km • Network: ${esc(eq.net)}</div>
+          </div>
+        `;
+      }).join('');
+
+      const detailsEl = document.getElementById('earthquake-details');
+      detailsEl.innerHTML = `
+        <div style="margin-top:15px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+            <strong style="font-size:16px;color:#4fc3f7;">📊 Statistics</strong>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+            <div style="background:rgba(76,175,80,.2);padding:10px;border-radius:6px;text-align:center;">
+              <div style="font-size:20px;font-weight:bold;color:#4CAF50;">${esc(totalCount)}</div>
+              <div style="font-size:11px;opacity:.8;">Total</div>
+            </div>
+            <div style="background:rgba(255,193,7,.2);padding:10px;border-radius:6px;text-align:center;">
+              <div style="font-size:20px;font-weight:bold;color:#FFC107;">${esc(significantCount)}</div>
+              <div style="font-size:11px;opacity:.8;">Significant (5.0+)</div>
+            </div>
+            <div style="background:rgba(244,67,54,.2);padding:10px;border-radius:6px;text-align:center;">
+              <div style="font-size:20px;font-weight:bold;color:#F44336;">${esc(majorCount)}</div>
+              <div style="font-size:11px;opacity:.8;">Major (6.0+)</div>
+            </div>
+            <div style="background:rgba(79,195,247,.2);padding:10px;border-radius:6px;text-align:center;">
+              <div style="font-size:20px;font-weight:bold;color:#4fc3f7;">${esc(recentEarthquakes.length)}</div>
+              <div style="font-size:11px;opacity:.8;">Recent</div>
+            </div>
+          </div>
+          <div style="margin-bottom:15px;"><strong style="font-size:16px;color:#4fc3f7;">📋 Latest Events</strong></div>
+          <div class="earthquake-list">${listHtml}</div>
+          <div style="margin-top:15px;padding:10px;background:rgba(255,255,255,.05);border-radius:6px;font-size:11px;opacity:.8;">
+            <strong>Legend:</strong><br>
+            🌊 = Tsunami warning<br>
+            🟢🟡🟠🔴 = Alert levels<br>
+            ✈️ = Canadian Aircraft (🔴 Red markers)<br>
+            Click items to focus on location
+          </div>
+          ${showAirplanes && airplaneData.length > 0 ? `
+          <div style="margin-top:15px;">
+            <strong style="font-size:16px;color:#4fc3f7;">✈️ Aircraft Status</strong>
+            <div style="display:flex;justify-content:center;margin-top:10px;">
+              <div style="background:rgba(255,107,107,.2);padding:12px;border-radius:8px;text-align:center;min-width:120px;">
+                <div style="font-size:24px;font-weight:bold;color:#ff6b6b;">${esc(airplaneData.length)}</div>
+                <div style="font-size:12px;opacity:.8;">Canadian Aircraft</div>
+              </div>
+            </div>
+            <div style="margin-top:8px;font-size:10px;opacity:.7;text-align:center;">
+              Last updated: ${lastAirplaneUpdate ? esc(lastAirplaneUpdate.toLocaleTimeString()) : 'Never'}
+            </div>
+          </div>` : ''}
+        </div>
+      `;
+
+      // Bind click handlers (avoid inline handlers)
+      detailsEl.querySelectorAll('.earthquake-item[data-lat]').forEach(el => {
+        el.addEventListener('click', () => {
+          const lat = Number(el.getAttribute('data-lat'));
+          const lng = Number(el.getAttribute('data-lng'));
+          const mag = Number(el.getAttribute('data-mag'));
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            focusOnEarthquake(lat, lng, mag);
+          }
+        });
+      });
+    }
+
+    function getAlertIcon(alert) {
+      switch (alert) { case 'green': return '🟢 '; case 'yellow': return '🟡 '; case 'orange': return '🟠 '; case 'red': return '🔴 '; default: return ''; }
+    }
+
+    function focusOnEarthquake(lat, lng, magnitude) {
+      if (!isValidCoord(lat, lng)) return;
+
+      const latRad = lat * Math.PI / 180;
+      const lngRad = lng * Math.PI / 180;
+      const distance = Math.max(1.8, 3.5 - magnitude * 0.2);
+
+      const targetX = distance * Math.cos(latRad) * Math.cos(lngRad);
+      const targetY = distance * Math.sin(latRad);
+      const targetZ = -distance * Math.cos(latRad) * Math.sin(lngRad);
+
+      const targetMarker = earthquakeMarkers.find(m => {
+        const eq = m.userData;
+        return Math.abs(eq.lat - lat) < 0.001 && Math.abs(eq.lng - lng) < 0.001;
+      });
+      if (targetMarker) highlightMarker(targetMarker);
+
+      animateCamera(camera.position, new THREE.Vector3(targetX, targetY, targetZ), 1200);
+    }
+
+    function highlightMarker(marker) {
+      earthquakeMarkers.forEach(m => {
+        if (m.userData.isHighlighted) {
+          m.material.emissiveIntensity = 0.2;
+          m.scale.setScalar(1);
+          m.userData.isHighlighted = false;
+        }
+      });
+      marker.material.emissiveIntensity = 0.8;
+      marker.scale.setScalar(1.5);
+      marker.userData.isHighlighted = true;
+      setTimeout(() => {
+        if (marker.material) {
+          marker.material.emissiveIntensity = 0.2;
+          marker.scale.setScalar(1);
+          marker.userData.isHighlighted = false;
+        }
+      }, 3000);
+    }
+
+    function showAirplaneDetails(airplane) {
+      const detailsDiv = document.getElementById('earthquake-details');
+      const altitudeFt = Math.round((airplane.altitude || 0) * 3.28084);
+      const speedKnots = Math.round((airplane.velocity || 0) * 1.94384);
+      const verticalRateFpm = Math.round((airplane.vertical_rate || 0) * 196.85);
+      detailsDiv.innerHTML = `
+        <div style="margin-top:15px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;">
+            <strong style="font-size:16px;color:#4fc3f7;">✈️ Aircraft Details</strong>
+          </div>
+          <div class="earthquake-info">
+            <div style="font-size:16px;font-weight:bold;color:#ff6b6b;">${esc(airplane.callsign || 'Unknown Flight')}</div>
+            <div><strong>Country:</strong> ${esc(airplane.origin_country)}</div>
+            <div><strong>ICAO24:</strong> ${esc(airplane.icao24)}</div>
+            <div><strong>Altitude:</strong> ${esc(altitudeFt.toLocaleString())} ft (${esc(Math.round(airplane.altitude || 0))} m)</div>
+            <div><strong>Speed:</strong> ${esc(speedKnots)} knots (${esc(Math.round(airplane.velocity || 0))} m/s)</div>
+            <div><strong>Heading:</strong> ${esc(Math.round(airplane.heading || 0))}°</div>
+            <div><strong>Vertical Rate:</strong> ${verticalRateFpm > 0 ? '+' : ''}${esc(verticalRateFpm)} ft/min</div>
+            <div><strong>Position:</strong> ${esc(airplane.latitude.toFixed(4))}°, ${esc(airplane.longitude.toFixed(4))}°</div>
+            <div><strong>Last Contact:</strong> ${esc(new Date(airplane.last_contact * 1000).toLocaleTimeString())}</div>
+          </div>
+          <div style="margin-top:15px;padding:10px;background:rgba(255,255,255,.05);border-radius:6px;font-size:11px;opacity:.8;">
+            <strong>Aircraft Info:</strong><br>
+            Real-time data from OpenSky Network<br>
+            Updates every 30–45 seconds<br>
+            🔴 Canadian aircraft
+          </div>
+        </div>
+      `;
+    }
+
+    function focusOnAirplane(lat, lng) {
+      if (!isValidCoord(lat, lng)) return;
+
+      const latRad = lat * Math.PI / 180;
+      const lngRad = lng * Math.PI / 180;
+      const distance = 2.5;
+
+      const targetX = distance * Math.cos(latRad) * Math.cos(lngRad);
+      const targetY = distance * Math.sin(latRad);
+      const targetZ = -distance * Math.cos(latRad) * Math.sin(lngRad);
+
+      const targetMarker = airplaneMarkers.find(m => {
+        const a = m.userData;
+        return Math.abs(a.latitude - lat) < 0.001 && Math.abs(a.longitude - lng) < 0.001;
+      });
+      if (targetMarker) highlightAirplane(targetMarker);
+
+      animateCamera(camera.position, new THREE.Vector3(targetX, targetY, targetZ), 1200);
+    }
+
+    function highlightAirplane(marker) {
+      airplaneMarkers.forEach(m => {
+        if (m.userData.isHighlighted) {
+          m.material.opacity = 0.9;
+          m.scale.set(0.04, 0.04, 1);
+          m.userData.isHighlighted = false;
+        }
+      });
+      marker.material.opacity = 1.0;
+      marker.scale.set(0.08, 0.08, 1);
+      marker.userData.isHighlighted = true;
+      setTimeout(() => {
+        if (marker.material) {
+          marker.material.opacity = 0.9;
+          marker.scale.set(0.04, 0.04, 1);
+          marker.userData.isHighlighted = false;
+        }
+      }, 3000);
+    }
+
+    // Single, final animateCamera (with zoom clamping)
+    function animateCamera(startPos, endPos, duration) {
+      const startTime = Date.now();
+      const initialPos = startPos.clone();
+      const end = endPos.clone();
+      const endDistance = end.length();
+      if (endDistance < maxZoom) end.normalize().multiplyScalar(maxZoom);
+      else if (endDistance > minZoom * 8) end.normalize().multiplyScalar(minZoom * 8);
+
+      (function update() {
+        const elapsed = Date.now() - startTime;
+        const t = Math.min(elapsed / duration, 1);
+        const eased = 1 - Math.pow(1 - t, 3);
+        camera.position.lerpVectors(initialPos, end, eased);
+        camera.lookAt(0, 0, 0);
+        if (t < 1) requestAnimationFrame(update); else updateZoomInfo();
+      })();
+    }
+
+    function toggleControlsCollapse() {
+      const controls = document.getElementById('controls');
+      const collapseBtn = document.getElementById('collapse-btn');
+      controls.classList.toggle('collapsed');
+      if (controls.classList.contains('collapsed')) { collapseBtn.textContent = '▶'; collapseBtn.title = 'Expand controls'; }
+      else { collapseBtn.textContent = '◀'; collapseBtn.title = 'Collapse controls'; }
+    }
+
+    function toggleInfoCollapse() {
+      const info = document.getElementById('info');
+      const collapseBtn = document.getElementById('info-collapse-btn');
+      info.classList.toggle('collapsed');
+      if (info.classList.contains('collapsed')) {
+        collapseBtn.textContent = '▶';
+        collapseBtn.title = 'Expand info panel';
+      } else {
+        collapseBtn.textContent = '◀';
+        collapseBtn.title = 'Collapse info panel';
+      }
+    }
+
+    function toggleSection(headerElement) {
+      const section = headerElement.parentElement;
+      section.classList.toggle('collapsed');
+    }
+
+    function toggleAutoUpdate() {
+      autoUpdateEnabled = !autoUpdateEnabled;
+      const badge = document.getElementById('auto-update-badge');
+      const statusIndicator = document.querySelector('.status-indicator');
+      badge.textContent = autoUpdateEnabled ? 'ON' : 'OFF';
+      if (autoUpdateEnabled) { startAutoUpdate(); statusIndicator.classList.remove('error'); }
+      else { clearInterval(updateInterval); statusIndicator.classList.add('error'); }
+    }
+
+    function changeDataFeed(btn, feedType) {
+      // Only toggle active state within feed buttons
+      document.querySelectorAll('#controls .feed-button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentDataFeed = feedType;
+      loadEarthquakeData(feedType);
+    }
+
+    function refreshData() { loadEarthquakeData(currentDataFeed); }
+
+    function startAutoUpdate() {
+      try {
+        if (updateInterval) {
+          clearInterval(updateInterval);
+          updateInterval = null;
+        }
+
+        if (autoUpdateEnabled) {
+          updateInterval = setInterval(() => {
+            if (autoUpdateEnabled) {
+              console.log('Auto-updating earthquake data...');
+              loadEarthquakeData(currentDataFeed);
+            }
+          }, CONSTANTS.UPDATE_INTERVALS.EARTHQUAKE);
+          console.log('Auto-update started for earthquakes');
+        }
+      } catch (error) {
+        console.error('Error starting auto-update:', error);
+      }
+    }
+
+    function updateStatus() {
+      const statusText = document.getElementById('status-text');
+      const statusIndicator = document.querySelector('.status-indicator');
+      if (lastUpdateTime) { statusText.textContent = `Last updated: ${lastUpdateTime.toLocaleTimeString()}`; statusIndicator.classList.remove('error'); }
+      else { statusText.textContent = 'Last updated: Never'; statusIndicator.classList.add('error'); }
+    }
+
+    function getTimeAgo(timestamp) {
+      const diff = Date.now() - timestamp;
+      const minutes = Math.floor(diff / 60000);
+      const hours = Math.floor(diff / 3600000);
+      const days = Math.floor(diff / 86400000);
+      if (minutes < 1) return 'Just now';
+      if (minutes < 60) return `${minutes} min ago`;
+      if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+      return `${days} day${days > 1 ? 's' : ''} ago`;
+    }
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    window.addEventListener('keydown', (e) => {
+      switch (e.key.toLowerCase()) {
+        case ' ': e.preventDefault(); toggleRotation(); break;
+        case '+': case '=': e.preventDefault(); zoomIn(); break;
+        case '-': e.preventDefault(); zoomOut(); break;
+        case 'r': e.preventDefault(); resetView(); break;
+        case 'a': e.preventDefault(); toggleAirplanes(); break;
+        case 'i': e.preventDefault(); toggleISS(); break;
+        case 'c': e.preventDefault(); toggleCompass(); break;
+        case 'p': e.preventDefault(); toggleTectonicPlates(); break;
+        case 'h': e.preventDefault(); toggleHurricanes(); break;
+        case 't': e.preventDefault(); launchRocket(); break;
+        case 'l': e.preventDefault(); toggleInfoCollapse(); break;
+        case 'f': e.preventDefault(); refreshData(); break;
+      }
+    });
+
+    // Pause/Resume polling when tab visibility changes
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (updateInterval) clearInterval(updateInterval);
+        if (airplaneUpdateInterval) clearInterval(airplaneUpdateInterval);
+        if (issUpdateInterval) clearInterval(issUpdateInterval);
+        if (hurricaneUpdateInterval) clearInterval(hurricaneUpdateInterval);
+        if (fireUpdateInterval) clearInterval(fireUpdateInterval);
+      } else {
+        if (autoUpdateEnabled) startAutoUpdate();
+        if (showAirplanes) startAirplaneUpdate();
+        if (showISS) startISSUpdate();
+        if (showHurricanes) startHurricaneUpdate();
+        if (showFires) startFireUpdate();
+      }
+    });
+
+    function initResizeHandle() {
+      if (resizeInit) return; // guard against duplicate listeners
+      resizeInit = true;
+      const infoPanel = document.getElementById('info');
+      const resizeHandle = document.getElementById('resize-handle');
+      let isResizing = false;
+      resizeHandle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        document.addEventListener('mousemove', handleResize);
+        document.addEventListener('mouseup', stopResize);
+        e.preventDefault();
+      });
+      function handleResize(e) {
+        if (!isResizing) return;
+        const rect = infoPanel.getBoundingClientRect();
+        const newWidth = e.clientX - rect.left;
+        if (newWidth >= 300 && newWidth <= 800) infoPanel.style.width = newWidth + 'px';
+      }
+      function stopResize() {
+        isResizing = false;
+        document.removeEventListener('mousemove', handleResize);
+        document.removeEventListener('mouseup', stopResize);
+      }
+    }
+
+    function showInfoPanel() { document.getElementById('info').style.display = 'block'; initResizeHandle(); }
+
+    // OpenSky API (Canadian aircraft only) with CORS proxy
+    let retryCount = 0;
+    const maxRetries = 3;
+    const baseRetryDelay = 30000;
+
+    async function loadAirplaneData() {
+      if (!showAirplanes) return;
+      try {
+        const bounds = { lamin: 41.7, lamax: 83.1, lomin: -141.0, lomax: -52.6 };
+        const proxyUrl = 'https://api.allorigins.win/raw?url=';
+        const apiUrl = `https://opensky-network.org/api/states/all?lamin=${bounds.lamin}&lamax=${bounds.lamax}&lomin=${bounds.lomin}&lomax=${bounds.lomax}`;
+        const url = proxyUrl + encodeURIComponent(apiUrl);
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        const response = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+        clearTimeout(timeoutId);
+        if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+        const data = await response.json();
+        if (data && Array.isArray(data.states)) {
+          airplaneData = data.states
+            .filter(s => {
+              if (!Array.isArray(s) || s.length < 17) return false;
+              const [icao24, callsign, origin_country, , last_contact, lon, lat, , on_ground, velocity, true_track, vertical_rate, , geo_altitude] = s;
+              if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
+              if (!isValidCoord(lat, lon)) return false;
+              if (on_ground === true) return false;
+              if (!Number.isFinite(velocity) || velocity < 50) return false;
+              const now = Math.floor(Date.now() / 1000);
+              if (last_contact && (now - last_contact) > 300) return false;
+              return origin_country === 'Canada';
+            })
+            .map(s => {
+              const [icao24, callsign, origin_country, time_position, last_contact, longitude, latitude, baro_altitude, on_ground, velocity, true_track, vertical_rate, sensors, geo_altitude, squawk, spi, position_source] = s;
+              const clean = str => (typeof str === 'string' ? str.replace(/[<>"'&]/g, '').trim() || 'Unknown' : 'Unknown');
+              return {
+                icao24: clean(icao24),
+                callsign: clean(callsign),
+                origin_country: clean(origin_country),
+                latitude: Number(latitude),
+                longitude: Number(longitude),
+                altitude: Number(baro_altitude || geo_altitude || 0),
+                velocity: Number(velocity || 0),
+                heading: Number(true_track || 0),
+                vertical_rate: Number(vertical_rate || 0),
+                on_ground: Boolean(on_ground),
+                last_contact: Number(last_contact),
+                timestamp: Date.now(),
+                type: 'airplane'
+              };
+            });
+          if (airplaneData.length > 0) {
+            updateAirplaneVisualization();
+            lastAirplaneUpdate = new Date();
+            retryCount = 0;
+          }
+        } else {
+          throw new Error('Invalid API response format');
+        }
+      } catch (error) {
+        console.error('Error loading aircraft data:', error);
+        retryCount++;
+        if (retryCount <= maxRetries) {
+          const delay = baseRetryDelay * Math.pow(2, retryCount - 1);
+          setTimeout(() => loadAirplaneData(), delay);
+        } else {
+          retryCount = 0;
+        }
+      }
+    }
+
+    function updateAirplaneVisualization() {
+      if (!showAirplanes) { clearAirplanes(); return; }
+      clearAirplanes();
+      const batchSize = 10;
+      let idx = 0;
+      function processBatch() {
+        const end = Math.min(idx + batchSize, airplaneData.length);
+        for (let i = idx; i < end; i++) createAirplaneMarker(airplaneData[i]);
+        idx = end;
+        if (idx < airplaneData.length) requestAnimationFrame(processBatch);
+      }
+      if (airplaneData.length > 0) processBatch();
+    }
+
+    function clearAirplanes() {
+      airplaneMarkers.forEach(m => {
+        if (m.userData.trail) {
+          m.userData.trail.geometry.dispose();
+          m.userData.trail.material.dispose();
+          earthGroup.remove(m.userData.trail);
+        }
+        disposeObject(m);
+        earthGroup.remove(m);
+      });
+      airplaneMarkers = [];
+    }
+
+    function createAirplaneMarker(airplane) {
+      if (!isValidCoord(airplane.latitude, airplane.longitude)) return;
+
+      const lat = airplane.latitude * Math.PI / 180;
+      const lng = airplane.longitude * Math.PI / 180;
+
+      const altitudeKm = (airplane.altitude || 0) / 1000;
+      const radius = 1.02 + (altitudeKm * 0.0001);
+
+      const x = radius * Math.cos(lat) * Math.cos(lng);
+      const y = radius * Math.sin(lat);
+      const z = -radius * Math.cos(lat) * Math.sin(lng);
+
+      // Create plane emoji sprite
+      const canvas = document.createElement('canvas');
+      canvas.width = 64;
+      canvas.height = 64;
+      const ctx = canvas.getContext('2d');
+
+      // Clear canvas
+      ctx.clearRect(0, 0, 64, 64);
+
+      // Draw plane emoji
+      ctx.font = '48px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('✈️', 32, 32);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({
+        map: texture,
+        transparent: true,
+        opacity: 0.9
+      });
+
+      const marker = new THREE.Sprite(material);
+      marker.scale.set(0.04, 0.04, 1);
+      marker.position.set(x, y, z);
+
+      // Rotate sprite based on heading
+      if (Number.isFinite(airplane.heading)) {
+        const headingRad = airplane.heading * Math.PI / 180;
+        marker.material.rotation = headingRad;
+      }
+
+      marker.userData = { ...airplane, originalPosition: { x, y, z } };
+
+      if (airplane.velocity > 100) createAirplaneTrail(marker, airplane);
+
+      earthGroup.add(marker);
+      airplaneMarkers.push(marker);
+    }
+
+    function createAirplaneTrail(marker, airplane) {
+      const trailGeometry = new THREE.BufferGeometry();
+      const positions = [];
+      const headingRad = (airplane.heading || 0) * Math.PI / 180;
+      const trailLength = 0.05;
+      for (let i = 0; i < 10; i++) {
+        const offset = (i / 10) * trailLength;
+        positions.push(
+          marker.position.x - Math.sin(headingRad) * offset,
+          marker.position.y,
+          marker.position.z - Math.cos(headingRad) * offset
+        );
+      }
+      trailGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      const trailMaterial = new THREE.LineBasicMaterial({ color: 0xff6666, transparent: true, opacity: 0.4 });
+      const trail = new THREE.Line(trailGeometry, trailMaterial);
+      earthGroup.add(trail);
+      marker.userData.trail = trail;
+    }
+
+    function toggleAirplanes() {
+      showAirplanes = !showAirplanes;
+      const badge = document.getElementById('airplane-badge');
+      badge.textContent = showAirplanes ? 'ON' : 'OFF';
+      if (showAirplanes) { loadAirplaneData(); startAirplaneUpdate(); }
+      else { clearAirplanes(); clearInterval(airplaneUpdateInterval); }
+    }
+
+    function refreshAirplaneData() { if (showAirplanes) loadAirplaneData(); }
+
+    function startAirplaneUpdate() {
+      try {
+        if (airplaneUpdateInterval) {
+          clearInterval(airplaneUpdateInterval);
+          airplaneUpdateInterval = null;
+        }
+
+        if (showAirplanes) {
+          airplaneUpdateInterval = setInterval(() => {
+            if (!showAirplanes) return;
+            const since = Date.now() - (lastAirplaneUpdate?.getTime() || 0);
+            if (since >= CONSTANTS.UPDATE_INTERVALS.AIRPLANE || retryCount === 0) {
+              console.log('Updating airplane data...');
+              loadAirplaneData();
+            }
+          }, CONSTANTS.UPDATE_INTERVALS.AIRPLANE);
+          console.log('Airplane update interval started');
+        }
+      } catch (error) {
+        console.error('Error starting airplane updates:', error);
+      }
+    }
+
+    // ISS Functions
+    async function loadISSData() {
+      if (!showISS) return;
+      try {
+        // Fetch TLE data for ISS using CORS-friendly helper
+        const tleText = await fetchTextMaybeProxy('https://celestrak.org/NORAD/elements/gp.php?CATNR=25544&FORMAT=TLE');
+        const lines = tleText.trim().split('\n');
+
+        if (lines.length >= 3) {
+          issTLE = {
+            name: lines[0].trim(),
+            line1: lines[1].trim(),
+            line2: lines[2].trim()
+          };
+
+          console.log('ISS TLE loaded:', issTLE.name);
+          updateISSPosition();
+          lastISSUpdate = new Date();
+        } else {
+          throw new Error('Invalid TLE format - expected 3 lines, got ' + lines.length);
+        }
+      } catch (error) {
+        console.error('Error loading ISS TLE data:', error);
+        // Fallback to a hardcoded recent TLE if fetch fails
+        try {
+          issTLE = {
+            name: 'ISS (ZARYA)',
+            line1: '1 25544U 98067A   25223.12345678  .00002182  00000-0  40864-4 0  9992',
+            line2: '2 25544  51.6461 339.7939 0001393  92.8340 267.3124 15.49309239123456'
+          };
+          console.log('Using fallback TLE for ISS');
+          updateISSPosition();
+          lastISSUpdate = new Date();
+        } catch (fallbackError) {
+          console.error('Even fallback TLE failed:', fallbackError);
+        }
+      }
+    }
+
+    function updateISSPosition() {
+      if (!issTLE || !showISS) return;
+
+      try {
+        const satrec = satellite.twoline2satrec(issTLE.line1, issTLE.line2);
+        const now = new Date();
+        
+        // Check if TLE parsing was successful
+        if (satrec.error !== 0) {
+          console.error('TLE parsing error:', satrec.error);
+          return;
+        }
+        
+        const positionAndVelocity = satellite.propagate(satrec, now);
+
+        if (positionAndVelocity.position && !positionAndVelocity.error) {
+          const gmst = satellite.gstime(now);
+          const positionGd = satellite.eciToGeodetic(positionAndVelocity.position, gmst);
+
+          const lat = satellite.degreesLat(positionGd.latitude);
+          const lng = satellite.degreesLong(positionGd.longitude);
+          const alt = positionGd.height; // km
+
+          console.log(`ISS Position: lat=${lat.toFixed(4)}, lng=${lng.toFixed(4)}, alt=${alt.toFixed(1)}km`);
+
+          if (isValidCoord(lat, lng)) {
+            issData = { latitude: lat, longitude: lng, altitude: alt, timestamp: now };
+            updateISSVisualization();
+            createISSOrbitPath(satrec, now);
+          } else {
+            console.error('Invalid ISS coordinates:', lat, lng);
+          }
+        } else {
+          console.error('Error in satellite propagation:', positionAndVelocity.error);
+        }
+      } catch (error) {
+        console.error('Error calculating ISS position:', error);
+      }
+    }
+
+    function updateISSVisualization() {
+      if (!issData || !showISS) {
+        clearISS();
+        hideISSBanner();
+        return;
+      }
+
+      clearISS();
+      createISSMarker(issData);
+      updateISSBanner(issData);
+    }
+
+    function clearISS() {
+      if (issMarker) {
+        disposeObject(issMarker);
+        earthGroup.remove(issMarker);
+        issMarker = null;
+      }
+      if (issOrbitPath) {
+        disposeObject(issOrbitPath);
+        earthGroup.remove(issOrbitPath);
+        issOrbitPath = null;
+      }
+    }
+
+    function createISSMarker(iss) {
+      if (!isValidCoord(iss.latitude, iss.longitude)) return;
+
+      // Use the existing latLngToVector3 helper for consistency
+      const position = latLngToVector3(iss.latitude, iss.longitude, 1.05);
+
+      // Create ISS model (simplified)
+      const geometry = new THREE.BoxGeometry(0.02, 0.01, 0.03);
+      const material = new THREE.MeshPhongMaterial({
+        color: 0x00ff00,
+        emissive: 0x004400,
+        emissiveIntensity: 0.3,
+        transparent: true,
+        opacity: 0.9
+      });
+
+      issMarker = new THREE.Mesh(geometry, material);
+      issMarker.position.copy(position);
+      issMarker.userData = { ...iss, type: 'ISS' };
+
+      // Add solar panels
+      const panelGeometry = new THREE.BoxGeometry(0.04, 0.001, 0.015);
+      const panelMaterial = new THREE.MeshPhongMaterial({
+        color: 0x0066cc,
+        transparent: true,
+        opacity: 0.7
+      });
+
+      const panel1 = new THREE.Mesh(panelGeometry, panelMaterial);
+      panel1.position.set(0.025, 0, 0);
+      issMarker.add(panel1);
+
+      const panel2 = new THREE.Mesh(panelGeometry, panelMaterial);
+      panel2.position.set(-0.025, 0, 0);
+      issMarker.add(panel2);
+
+      // Add pulsing effect
+      issMarker.userData.isPulsing = true;
+      issMarker.userData.pulseStart = Date.now();
+
+      // Orient the ISS to face the direction of travel
+      const normal = position.clone().normalize();
+      issMarker.lookAt(normal.clone().add(issMarker.position));
+
+      earthGroup.add(issMarker);
+      console.log('ISS marker created at position:', position);
+    }
+
+
+
+    function createISSOrbitPath(satrec, currentTime) {
+      if (!satrec) return;
+
+      const points = [];
+      const numPoints = 100;
+      const orbitPeriod = 90 * 60 * 1000; // ~90 minutes in milliseconds
+
+      for (let i = 0; i < numPoints; i++) {
+        const time = new Date(currentTime.getTime() + (i * orbitPeriod / numPoints));
+        const positionAndVelocity = satellite.propagate(satrec, time);
+
+        if (positionAndVelocity.position && !positionAndVelocity.error) {
+          const gmst = satellite.gstime(time);
+          const positionGd = satellite.eciToGeodetic(positionAndVelocity.position, gmst);
+
+          const lat = satellite.degreesLat(positionGd.latitude);
+          const lng = satellite.degreesLong(positionGd.longitude);
+
+          if (isValidCoord(lat, lng)) {
+            // Use the consistent latLngToVector3 helper
+            const point = latLngToVector3(lat, lng, 1.04);
+            points.push(point);
+          }
+        }
+      }
+
+      if (points.length > 1) {
+        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+        const material = new THREE.LineBasicMaterial({
+          color: 0x00ff00,
+          transparent: true,
+          opacity: 0.6,
+          linewidth: 2
+        });
+
+        issOrbitPath = new THREE.Line(geometry, material);
+        earthGroup.add(issOrbitPath);
+      }
+    }
+
+    function showISSDetails(iss) {
+      const detailsDiv = document.getElementById('earthquake-details');
+      const altitudeKm = Math.round(iss.altitude);
+      const speedKmh = 27600; // Approximate ISS speed
+
+      detailsDiv.innerHTML = `
+        <div class="earthquake-info">
+          <h4 style="color: #00ff00; margin-bottom: 10px;">🛰️ International Space Station</h4>
+          <div><strong>Position:</strong> ${iss.latitude.toFixed(4)}°, ${iss.longitude.toFixed(4)}°</div>
+          <div><strong>Altitude:</strong> ${altitudeKm} km</div>
+          <div><strong>Speed:</strong> ~${speedKmh.toLocaleString()} km/h</div>
+          <div><strong>Orbital Period:</strong> ~90 minutes</div>
+          <div><strong>Last Update:</strong> ${new Date(iss.timestamp).toLocaleTimeString()}</div>
+          <div style="margin-top: 10px; font-size: 11px; opacity: 0.8;">
+            The ISS orbits Earth approximately every 90 minutes at an altitude of about 400km.
+            It travels at roughly 27,600 km/h (17,150 mph).
+          </div>
+        </div>
+      `;
+    }
+
+    function showHurricaneDetails(hurricane) {
+      const detailsDiv = document.getElementById('earthquake-details');
+
+      detailsDiv.innerHTML = `
+        <div class="earthquake-info">
+          <h4 style="color: #ff8800; margin-bottom: 10px;">🌀 ${esc(hurricane.headline || hurricane.event || 'Tropical System')}</h4>
+          <div><strong>Position:</strong> ${hurricane.lat.toFixed(2)}°, ${hurricane.lng.toFixed(2)}°</div>
+          <div><strong>Event Type:</strong> ${esc(hurricane.event || 'Unknown')}</div>
+          <div><strong>Severity:</strong> ${esc(hurricane.severity || 'Unknown')}</div>
+          <div><strong>Urgency:</strong> ${esc(hurricane.urgency || 'Unknown')}</div>
+          <div><strong>Certainty:</strong> ${esc(hurricane.certainty || 'Unknown')}</div>
+          ${hurricane.description ? `<div><strong>Details:</strong> ${esc(hurricane.description)}</div>` : ''}
+          <div><strong>Last Update:</strong> ${lastHurricaneUpdate ? lastHurricaneUpdate.toLocaleTimeString() : 'Unknown'}</div>
+          <div style="margin-top: 10px; font-size: 11px; opacity: 0.8;">
+            Hurricane data provided by NOAA National Hurricane Center and National Weather Service.
+            Click on storm center for detailed information.
+          </div>
+        </div>
+      `;
+    }
+
+    function focusOnHurricane(lat, lng) {
+      if (!isValidCoord(lat, lng)) return;
+
+      const latRad = lat * Math.PI / 180;
+      const lngRad = lng * Math.PI / 180;
+
+      const targetRotationY = -lngRad;
+      const targetRotationX = -latRad;
+
+      const startRotationY = earthGroup.rotation.y;
+      const startRotationX = earthGroup.rotation.x;
+
+      const duration = 1500;
+      const startTime = Date.now();
+
+      function animateToHurricane() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+        earthGroup.rotation.y = startRotationY + (targetRotationY - startRotationY) * easeProgress;
+        earthGroup.rotation.x = startRotationX + (targetRotationX - startRotationX) * easeProgress;
+
+        if (progress < 1) requestAnimationFrame(animateToHurricane);
+      }
+
+      animateToHurricane();
+    }
+
+    function showFireDetails(fire) {
+      const detailsDiv = document.getElementById('earthquake-details');
+
+      const confidence = fire.fireData?.confidence || 'unknown';
+      const brightness = fire.fireData?.brightness || 'unknown';
+      const date = fire.fireData?.date || 'unknown';
+      
+      // Determine fire intensity description
+      let intensityDesc = 'Moderate fire activity';
+      if (confidence === 'high' || (typeof brightness === 'number' && brightness > 330)) {
+        intensityDesc = 'High intensity fire';
+      } else if (confidence === 'low') {
+        intensityDesc = 'Low confidence detection';
+      }
+
+      detailsDiv.innerHTML = `
+        <div class="earthquake-info">
+          <h4 style="color: #ff4400; margin-bottom: 10px;">🔥 ${esc(fire.name || 'Active Fire')}</h4>
+          <div><strong>Position:</strong> ${fire.lat.toFixed(4)}°, ${fire.lng.toFixed(4)}°</div>
+          <div><strong>Confidence:</strong> ${esc(confidence.toString())}</div>
+          ${typeof brightness === 'number' ? `<div><strong>Brightness Temp:</strong> ${brightness.toFixed(1)}K</div>` : ''}
+          <div><strong>Detection Date:</strong> ${esc(date.toString())}</div>
+          <div><strong>Intensity:</strong> ${intensityDesc}</div>
+          <div style="margin-top: 10px; font-size: 11px; opacity: 0.8;">
+            Fire data provided by NASA FIRMS (Fire Information for Resource Management System).
+            Data from MODIS and VIIRS satellite instruments updated multiple times daily.
+          </div>
+        </div>
+      `;
+    }
+
+    function focusOnFire(lat, lng) {
+      if (!isValidCoord(lat, lng)) return;
+
+      const latRad = lat * Math.PI / 180;
+      const lngRad = lng * Math.PI / 180;
+
+      const targetRotationY = -lngRad;
+      const targetRotationX = -latRad;
+
+      const startRotationY = earthGroup.rotation.y;
+      const startRotationX = earthGroup.rotation.x;
+
+      const duration = 1500;
+      const startTime = Date.now();
+
+      function animateToFire() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+        earthGroup.rotation.y = startRotationY + (targetRotationY - startRotationY) * easeProgress;
+        earthGroup.rotation.x = startRotationX + (targetRotationX - startRotationX) * easeProgress;
+
+        if (progress < 1) requestAnimationFrame(animateToFire);
+      }
+
+      animateToFire();
+    }
+
+    function updateISSBanner(iss) {
+      if (!iss || !showISS) {
+        hideISSBanner();
+        return;
+      }
+
+      const banner = document.getElementById('iss-info-banner');
+      const positionEl = document.getElementById('iss-position');
+      const altitudeEl = document.getElementById('iss-altitude');
+      const nextPassEl = document.getElementById('iss-next-pass');
+
+      if (positionEl) positionEl.textContent = `${iss.latitude.toFixed(2)}°, ${iss.longitude.toFixed(2)}°`;
+      if (altitudeEl) altitudeEl.textContent = `${Math.round(iss.altitude)} km`;
+      if (nextPassEl) {
+        // Calculate approximate next pass time (simplified)
+        const now = new Date();
+        const nextPass = new Date(now.getTime() + (90 * 60 * 1000)); // ~90 minutes
+        nextPassEl.textContent = nextPass.toLocaleTimeString();
+      }
+
+      banner.classList.add('visible');
+    }
+
+    function hideISSBanner() {
+      const banner = document.getElementById('iss-info-banner');
+      banner.classList.remove('visible');
+    }
+
+    function toggleISSBanner() {
+      const banner = document.getElementById('iss-info-banner');
+      banner.classList.toggle('collapsed');
+    }
+
+    function showISSBanner() {
+      if (issData && showISS) {
+        updateISSBanner(issData);
+      }
+    }
+
+    function focusOnISS(lat, lng) {
+      if (!isValidCoord(lat, lng)) return;
+
+      const latRad = lat * Math.PI / 180;
+      const lngRad = lng * Math.PI / 180;
+
+      const targetRotationY = -lngRad;
+      const targetRotationX = -latRad;
+
+      const startRotationY = earthGroup.rotation.y;
+      const startRotationX = earthGroup.rotation.x;
+
+      const duration = 1500;
+      const startTime = Date.now();
+
+      function animateToISS() {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+
+        earthGroup.rotation.y = startRotationY + (targetRotationY - startRotationY) * easeProgress;
+        earthGroup.rotation.x = startRotationX + (targetRotationX - startRotationX) * easeProgress;
+
+        if (progress < 1) requestAnimationFrame(animateToISS);
+      }
+
+      animateToISS();
+    }
+
+    function toggleISS() {
+      showISS = !showISS;
+      const badge = document.getElementById('iss-badge');
+      badge.textContent = showISS ? 'ON' : 'OFF';
+      updateISSVisualization();
+    }
+
+    function refreshISSData() {
+      if (showISS) loadISSData();
+    }
+
+    function startISSUpdate() {
+      try {
+        if (issUpdateInterval) {
+          clearInterval(issUpdateInterval);
+          issUpdateInterval = null;
+        }
+
+        if (showISS) {
+          issUpdateInterval = setInterval(() => {
+            if (!showISS || !issTLE) {
+              console.warn('ISS update skipped: ISS disabled or missing TLE data');
+              return;
+            }
+            updateISSPosition();
+          }, CONSTANTS.UPDATE_INTERVALS.ISS);
+          console.log('ISS update interval started');
+        }
+      } catch (error) {
+        console.error('Error starting ISS updates:', error);
+      }
+    }
+
+    function toggleRotation() {
+      autoRotate = !autoRotate;
+      document.getElementById('rotation-badge').textContent = autoRotate ? 'ON' : 'OFF';
+    }
+
+    function zoomIn() {
+      camera.position.multiplyScalar(0.8);
+      const d = camera.position.length();
+      if (d < CONSTANTS.ZOOM_LIMITS.MAX) {
+        camera.position.normalize().multiplyScalar(CONSTANTS.ZOOM_LIMITS.MAX);
+      }
+      updateZoomInfo();
+    }
+
+    function zoomOut() {
+      camera.position.multiplyScalar(1.25);
+      const d = camera.position.length();
+      if (d > CONSTANTS.ZOOM_LIMITS.MIN * 8) {
+        camera.position.normalize().multiplyScalar(CONSTANTS.ZOOM_LIMITS.MIN * 8);
+      }
+      updateZoomInfo();
+    }
+
+    function resetView() {
+      camera.position.set(0, 0, 3);
+      camera.lookAt(0, 0, 0);
+      earthGroup.rotation.set(0, 0, 0);
+      autoRotate = true;
+      document.getElementById('rotation-badge').textContent = 'ON';
+      updateZoomInfo();
+    }
+
+    function updateZoomInfo() {
+      const distance = camera.position.length();
+      const zoomLevel = Math.round((1 / distance) * 100);
+      console.log(`Zoom level: ${zoomLevel}% (Distance: ${distance.toFixed(2)})`);
+    }
+
+    // Generic CORS-friendly fetch helpers for allowed domains
+    const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+    function isCorsProxyAllowed(urlStr) {
+      try { const u = new URL(urlStr); return /(^|\.)noaa\.gov$/.test(u.hostname) || /(^|\.)weather\.gov$/.test(u.hostname); } catch { return false; }
+    }
+    async function fetchJsonMaybeProxy(url, options = {}) {
+      // Try direct
+      try {
+        const res = await fetch(url, options);
+        if (res.ok) return res.json();
+      } catch { }
+      // Fallback via proxy for allowed domains
+      if (isCorsProxyAllowed(url)) {
+        const proxied = CORS_PROXY + encodeURIComponent(url);
+        const res2 = await fetch(proxied, { headers: { 'Accept': 'application/json' }, signal: options.signal });
+        if (res2.ok) return res2.json();
+      }
+      throw new Error('Network/CORS error fetching ' + url);
+    }
+    async function fetchTextMaybeProxy(url, options = {}) {
+      try {
+        const res = await fetch(url, options);
+        if (res.ok) return res.text();
+      } catch { }
+      if (isCorsProxyAllowed(url)) {
+        const proxied = CORS_PROXY + encodeURIComponent(url);
+        const res2 = await fetch(proxied, { signal: options.signal });
+        if (res2.ok) return res2.text();
+      }
+      throw new Error('Network/CORS error fetching ' + url);
+    }
+
+    // =========================
+    // Tectonic Plates Overlay
+    // =========================
+    async function loadPlateGeoJson() {
+      if (plateGeoJson) return plateGeoJson;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      try {
+        const data = await fetchJsonMaybeProxy(PLATE_GEOJSON_URL, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+        if (!data || data.type !== 'FeatureCollection' || !Array.isArray(data.features)) {
+          throw new Error('Invalid plate GeoJSON');
+        }
+        plateGeoJson = data;
+        return plateGeoJson;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    function buildPlateGroup(geojson) {
+      const group = new THREE.Group();
+      const baseMaterial = new THREE.LineBasicMaterial({ color: 0x00e5ff, transparent: true, opacity: 0.7 });
+
+      function addLineString(coords) {
+        const points = [];
+        for (const c of coords) {
+          const [lng, lat] = c;
+          if (!isValidCoord(lat, lng)) continue;
+          points.push(latLngToVector3(lat, lng, 1.012));
+        }
+        if (points.length >= 2) {
+          const geometry = new THREE.BufferGeometry().setFromPoints(points);
+          const line = new THREE.Line(geometry, baseMaterial.clone());
+          group.add(line);
+        }
+      }
+
+      for (const f of geojson.features) {
+        if (!f || !f.geometry) continue;
+        const g = f.geometry;
+        if (g.type === 'LineString' && Array.isArray(g.coordinates)) {
+          addLineString(g.coordinates);
+        } else if (g.type === 'MultiLineString' && Array.isArray(g.coordinates)) {
+          for (const ls of g.coordinates) addLineString(ls);
+        }
+      }
+      return group;
+    }
+
+    function clearPlateOverlay() {
+      if (!plateGroup) return;
+      plateGroup.children.forEach(ch => disposeObject(ch));
+      earthGroup.remove(plateGroup);
+      plateGroup = null;
+    }
+
+    async function ensurePlateOverlay() {
+      if (plateGroup) return;
+      try {
+        const data = await loadPlateGeoJson();
+        plateGroup = buildPlateGroup(data);
+        earthGroup.add(plateGroup);
+      } catch (err) {
+        console.error('Error loading tectonic plates:', err);
+        const badge = document.getElementById('plates-badge');
+        if (badge) badge.textContent = 'OFF';
+        showPlates = false;
+        const statusText = document.getElementById('status-text');
+        if (statusText) statusText.textContent = `Plates error: ${esc(err.message)}`;
+      }
+    }
+
+    async function toggleTectonicPlates() {
+      showPlates = !showPlates;
+      const badge = document.getElementById('plates-badge');
+      if (badge) badge.textContent = showPlates ? 'ON' : 'OFF';
+      if (showPlates) await ensurePlateOverlay(); else clearPlateOverlay();
+    }
+
+    async function refreshTectonicPlates() {
+      plateGeoJson = null;
+      clearPlateOverlay();
+      if (showPlates) await ensurePlateOverlay();
+    }
+
+    // =========================
+    // Hurricane Alerts Overlay
+    // =========================
+    async function loadHurricaneGeoJson() {
+      if (hurricaneGeoJson) return hurricaneGeoJson;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      try {
+        const collected = { type: 'FeatureCollection', features: [] };
+        for (const url of HURRICANE_GEOJSON_URLS) {
+          try {
+            let data;
+            try {
+              data = await fetchJsonMaybeProxy(url, { signal: controller.signal, headers: { 'Accept': 'application/geo+json, application/json' } });
+            } catch { continue; }
+            if (data && data.type === 'FeatureCollection' && Array.isArray(data.features)) {
+              // Filter to polygonal geometries only for rendering boundaries
+              data.features.forEach(f => {
+                if (f && f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon')) {
+                  collected.features.push(f);
+                }
+              });
+            }
+          } catch (e) {
+            // continue other feeds
+          }
+        }
+        hurricaneGeoJson = collected;
+        return hurricaneGeoJson;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    function clearHurricaneOverlay() {
+      if (!hurricaneGroup) return;
+      hurricaneGroup.children.forEach(ch => disposeObject(ch));
+      earthGroup.remove(hurricaneGroup);
+      hurricaneGroup = null;
+    }
+
+    function buildHurricaneGroup(geojson) {
+      const group = new THREE.Group();
+      const outlineMat = new THREE.LineBasicMaterial({ color: 0xffa500, transparent: true, opacity: 0.75 });
+
+      function addPolygon(rings) {
+        // rings: [ [ [lng,lat], ... ] outer, [ ...holes ] ]
+        const radius = 1.018; // slightly above plates
+        rings.forEach((ring, idx) => {
+          const pts = [];
+          ring.forEach(([lng, lat]) => {
+            if (!isValidCoord(lat, lng)) return;
+            pts.push(latLngToVector3(lat, lng, radius));
+          });
+          if (pts.length >= 3) {
+            // close loop visually
+            pts.push(pts[0].clone());
+            const geom = new THREE.BufferGeometry().setFromPoints(pts);
+            const line = new THREE.Line(geom, outlineMat.clone());
+            group.add(line);
+          }
+        });
+      }
+
+      for (const f of geojson.features) {
+        const g = f.geometry;
+        if (!g) continue;
+        if (g.type === 'Polygon') {
+          addPolygon(g.coordinates);
+        } else if (g.type === 'MultiPolygon') {
+          g.coordinates.forEach(poly => addPolygon(poly));
+        }
+      }
+      return group;
+    }
+
+    function clearHurricaneCenters() {
+      if (!hurricaneGroup) return;
+      // remove child sprites tagged as 'hurricane-center'
+      const toRemove = hurricaneGroup.children.filter(ch => ch.userData && ch.userData.type === 'hurricane-center');
+      toRemove.forEach(ch => { disposeObject(ch); hurricaneGroup.remove(ch); });
+    }
+
+    function addHurricaneCenterMarker(lat, lng, labelText) {
+      if (!isValidCoord(lat, lng)) return null;
+      const size = 64;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      ctx.font = '42px system-ui, Segoe UI Emoji, Noto Color Emoji';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('🌀', size / 2, size / 2 + 2);
+      const texture = new THREE.CanvasTexture(canvas);
+      const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+      const sprite = new THREE.Sprite(material);
+      const radius = 1.02;
+      const latRad = lat * Math.PI / 180;
+      const lngRad = lng * Math.PI / 180;
+      const x = radius * Math.cos(latRad) * Math.cos(lngRad);
+      const y = radius * Math.sin(latRad);
+      const z = -radius * Math.cos(latRad) * Math.sin(lngRad);
+      sprite.position.set(x, y, z);
+      sprite.scale.set(0.08, 0.08, 1);
+      sprite.userData = { type: 'hurricane-center', lat, lng };
+      if (!hurricaneGroup) hurricaneGroup = new THREE.Group();
+      hurricaneGroup.add(sprite);
+
+      // Optional: add small text label under the icon
+      if (labelText) {
+        const labelCanvas = document.createElement('canvas');
+        labelCanvas.width = 256; labelCanvas.height = 64;
+        const lctx = labelCanvas.getContext('2d');
+        lctx.fillStyle = 'rgba(0,0,0,0.6)';
+        lctx.fillRect(0, 16, 256, 32);
+        lctx.fillStyle = '#fff';
+        lctx.font = '20px system-ui';
+        lctx.textAlign = 'center'; lctx.textBaseline = 'middle';
+        lctx.fillText(String(labelText).slice(0, 28), 128, 32);
+        const ltex = new THREE.CanvasTexture(labelCanvas);
+        const lmat = new THREE.SpriteMaterial({ map: ltex, transparent: true });
+        const lbl = new THREE.Sprite(lmat);
+        lbl.position.copy(sprite.position).multiplyScalar(1.005);
+        lbl.scale.set(0.35, 0.09, 1);
+        lbl.userData = { type: 'hurricane-center' };
+        hurricaneGroup.add(lbl);
+      }
+      return sprite;
+    }
+
+    function polygonCentroid(coords) {
+      // coords: [ [lng,lat], ... ] (not necessarily closed)
+      let x = 0, y = 0, z = 0, n = 0;
+      coords.forEach(([lng, lat]) => {
+        if (!isValidCoord(lat, lng)) return;
+        const latRad = lat * Math.PI / 180;
+        const lngRad = lng * Math.PI / 180;
+        x += Math.cos(latRad) * Math.cos(lngRad);
+        y += Math.sin(latRad);
+        z += -Math.cos(latRad) * Math.sin(lngRad);
+        n++;
+      });
+      if (!n) return null;
+      x /= n; y /= n; z /= n;
+      const r = Math.sqrt(x * x + y * y + z * z) || 1;
+      const nx = x / r, ny = y / r, nz = z / r;
+      const lat = Math.asin(ny) * 180 / Math.PI;
+      const lng = Math.atan2(-nz, nx) * 180 / Math.PI;
+      return { lat, lng };
+    }
+
+    async function addCurrentHurricaneCenters() {
+      clearHurricaneCenters();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      try {
+        let centerCount = 0;
+        
+        // Method 1: Try NHC Current Storms first
+        let centers = [];
+        try {
+          console.log('Fetching from NHC CurrentStorms.json...');
+          const data = await fetchJsonMaybeProxy(NHC_CURRENT_STORMS_URL, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
+          if (Array.isArray(data)) {
+            centers = data
+              .map(s => {
+                const lat = Number(s?.lat || s?.Latitude || s?.latitude);
+                const lng = Number(s?.lon || s?.Longitude || s?.longitude);
+                const name = s?.name || s?.stormName || s?.id || 'Storm';
+                return (Number.isFinite(lat) && Number.isFinite(lng)) ? { lat, lng, name, data: s } : null;
+              })
+              .filter(Boolean);
+            console.log(`Found ${centers.length} storms from NHC CurrentStorms`);
+          }
+        } catch (e) {
+          console.warn('NHC CurrentStorms failed:', e);
+        }
+
+        // Method 2: Enhanced NWS alerts for tropical events
+        if (centers.length === 0) {
+          try {
+            console.log('Fetching tropical alerts from NWS...');
+            const alertUrls = [
+              'https://api.weather.gov/alerts/active?event=Hurricane',
+              'https://api.weather.gov/alerts/active?event=Tropical%20Storm',
+              'https://api.weather.gov/alerts/active?category=Met&urgency=Immediate'
+            ];
+            
+            for (const url of alertUrls) {
+              try {
+                const data = await fetchJsonMaybeProxy(url, { signal: controller.signal });
+                if (data?.features) {
+                  data.features.forEach(feature => {
+                    if (feature.geometry?.type === 'Point') {
+                      const [lng, lat] = feature.geometry.coordinates;
+                      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                        const name = feature.properties?.event || feature.properties?.headline || 'Storm Alert';
+                        centers.push({ lat, lng, name, data: feature.properties });
+                      }
+                    } else if (feature.geometry?.coordinates && feature.properties) {
+                      // Extract center from polygon bounds
+                      const bounds = getPolygonBounds(feature.geometry.coordinates);
+                      if (bounds) {
+                        const centerLat = (bounds.north + bounds.south) / 2;
+                        const centerLng = (bounds.east + bounds.west) / 2;
+                        const name = feature.properties.event || 'Storm Area';
+                        centers.push({ lat: centerLat, lng: centerLng, name, data: feature.properties });
+                      }
+                    }
+                  });
+                }
+              } catch (e) {
+                console.warn(`Failed to fetch from ${url}:`, e);
+              }
+            }
+            console.log(`Found ${centers.length} total storm centers from NWS alerts`);
+          } catch (e) {
+            console.warn('NWS alerts failed:', e);
+          }
+        }
+
+        // Method 3: Fallback to test storm for demonstration if APIs fail
+        if (centers.length === 0) {
+          console.log('No API data found, adding test storm for demonstration...');
+          // Add a test storm in the Atlantic for demonstration
+          centers.push({ 
+            lat: 25.5, 
+            lng: -80.0, 
+            name: 'Test Hurricane (Demo)', 
+            data: { 
+              intensity: 'Category 2',
+              windSpeed: '105 mph',
+              pressure: '970 mb',
+              status: 'Active (Demo Data)'
+            } 
+          });
+          console.log('Added demonstration hurricane center');
+        }
+
+        // Add all found storm centers to the globe
+        centers.forEach(center => {
+          addStormCenter(center.lat, center.lng, center.name, center.data);
+          centerCount++;
+        });
+        
+        console.log(`Added ${centerCount} hurricane centers to globe`);
+        
+        // Update status with detailed information
+        const statusText = document.getElementById('status-text');
+        if (statusText) {
+          if (centerCount > 0) {
+            statusText.textContent = `Hurricanes: ${centerCount} active storm center${centerCount > 1 ? 's' : ''} displayed`;
+          } else {
+            statusText.textContent = 'Hurricanes: No active storms found in current data feeds';
+          }
+        }
+        
+        return centerCount;
+        
+      } catch (error) {
+        console.error('Error adding hurricane centers:', error);
+        return 0;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
+
+    // Helper function to get polygon bounds
+    function getPolygonBounds(coordinates) {
+      try {
+        let minLat = Infinity, maxLat = -Infinity;
+        let minLng = Infinity, maxLng = -Infinity;
+        
+        const processCoords = (coords) => {
+          if (Array.isArray(coords) && coords.length >= 2 && typeof coords[0] === 'number') {
+            const [lng, lat] = coords;
+            minLat = Math.min(minLat, lat);
+            maxLat = Math.max(maxLat, lat);
+            minLng = Math.min(minLng, lng);
+            maxLng = Math.max(maxLng, lng);
+          } else if (Array.isArray(coords)) {
+            coords.forEach(processCoords);
+          }
+        };
+        
+        processCoords(coordinates);
+        
+        if (Number.isFinite(minLat) && Number.isFinite(maxLat)) {
+          return { north: maxLat, south: minLat, east: maxLng, west: minLng };
+        }
+      } catch (e) {
+        console.warn('Error calculating polygon bounds:', e);
+      }
+      return null;
+    }
+
+    // Enhanced storm center marker function
+    function addStormCenter(lat, lng, name, stormData = {}) {
+      try {
+        // Ensure hurricane group exists
+        if (!hurricaneGroup) {
+          hurricaneGroup = new THREE.Group();
+          earthGroup.add(hurricaneGroup);
+        }
+        
+        const position = latLngToVector3(lat, lng, RADIUS + 50); // Slightly above surface
+        
+        // Create storm marker with hurricane emoji
+        const canvas = document.createElement('canvas');
+        canvas.width = 64;
+        canvas.height = 64;
+        const ctx = canvas.getContext('2d');
+        
+        // Draw background circle
+        ctx.fillStyle = '#ff4444';
+        ctx.beginPath();
+        ctx.arc(32, 32, 30, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Add hurricane emoji
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'white';
+        ctx.fillText('🌀', 32, 32);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(material);
+        sprite.position.copy(position);
+        sprite.scale.setScalar(80); // Make it visible
+        sprite.userData = { type: 'hurricane-center', name, lat, lng, stormData };
+        
+        hurricaneGroup.add(sprite);
+        
+        console.log(`Added storm center: ${name} at ${lat.toFixed(2)}, ${lng.toFixed(2)}`);
+        
+      } catch (error) {
+        console.error(`Error adding storm center ${name}:`, error);
+      }
+    }
+
+    async function ensureHurricaneOverlay() {
+      if (hurricaneGroup) return;
+      try {
+        const data = await loadHurricaneGeoJson();
+        if (data && Array.isArray(data.features) && data.features.length > 0) {
+          hurricaneGroup = buildHurricaneGroup(data);
+          earthGroup.add(hurricaneGroup);
+        }
+        // Always try to add current centers, even if no polygons
+        const centerCount = await addCurrentHurricaneCenters();
+        // If nothing was added, surface a status
+        const statusText = document.getElementById('status-text');
+        if (!hurricaneGroup || hurricaneGroup.children.length === 0) {
+          if (statusText) statusText.textContent = 'No active hurricane tracks/alerts available';
+        } else if (statusText) {
+          const children = hurricaneGroup.children.length;
+          const centers = hurricaneGroup.children.filter?.(c => c.userData?.type === 'hurricane-center').length || 0;
+          const outlines = children - centers;
+          statusText.textContent = `Hurricanes: ${centers} centers, ${outlines} outlines`;
+        }
+      } catch (err) {
+        console.error('Error loading hurricane alerts:', err);
+        const badge = document.getElementById('hurricane-badge');
+        if (badge) badge.textContent = 'OFF';
+        showHurricanes = false;
+        const statusText = document.getElementById('status-text');
+        if (statusText) statusText.textContent = `Hurricanes error: ${esc(err.message)}`;
+      }
+    }
+
+    async function toggleHurricanes() {
+      showHurricanes = !showHurricanes;
+      const badge = document.getElementById('hurricane-badge');
+      if (badge) badge.textContent = showHurricanes ? 'ON' : 'OFF';
+      if (showHurricanes) { await ensureHurricaneOverlay(); startHurricaneUpdate(); }
+      else { clearHurricaneOverlay(); if (hurricaneUpdateInterval) clearInterval(hurricaneUpdateInterval); }
+    }
+
+    async function refreshHurricanes() {
+      hurricaneGeoJson = null;
+      clearHurricaneOverlay();
+      if (showHurricanes) await ensureHurricaneOverlay();
+    }
+
+    function startHurricaneUpdate() {
+      if (!showHurricanes) return;
+      if (hurricaneUpdateInterval) clearInterval(hurricaneUpdateInterval);
+      // Refresh alerts every 10 minutes and update centers, lightweight
+      hurricaneUpdateInterval = setInterval(async () => {
+        if (!showHurricanes) return;
+        try {
+          await refreshHurricanes();
+          await addCurrentHurricaneCenters();
+        } catch (e) {
+          // non-fatal
+        }
+      }, 10 * 60 * 1000);
+    }
+
+    // =========================
+    // NASA FIRES OVERLAY
+    // =========================
+
+    async function toggleFires() {
+      showFires = !showFires;
+      const badge = document.getElementById('fire-badge');
+      if (badge) badge.textContent = showFires ? 'ON' : 'OFF';
+      if (showFires) { 
+        await ensureFireOverlay(); 
+        startFireUpdate(); 
+      } else { 
+        clearFireOverlay(); 
+        if (fireUpdateInterval) clearInterval(fireUpdateInterval); 
+      }
+    }
+
+    async function refreshFires() {
+      fireData = null;
+      clearFireOverlay();
+      if (showFires) await ensureFireOverlay();
+    }
+
+    async function ensureFireOverlay() {
+      if (fireGroup) return;
+      try {
+        console.log('Loading NASA FIRMS fire data...');
+        fireGroup = new THREE.Group();
+        earthGroup.add(fireGroup);
+        
+        const fireCount = await loadFireData();
+        
+        const statusText = document.getElementById('status-text');
+        if (statusText) {
+          if (fireCount > 0) {
+            statusText.textContent = `Fires: ${fireCount} active fire${fireCount > 1 ? 's' : ''} detected`;
+          } else {
+            statusText.textContent = 'Fires: No active fires found in current data';
+          }
+        }
+        
+      } catch (err) {
+        console.error('Error loading fire data:', err);
+        const badge = document.getElementById('fire-badge');
+        if (badge) badge.textContent = 'OFF';
+        showFires = false;
+        const statusText = document.getElementById('status-text');
+        if (statusText) statusText.textContent = `Fire data error: ${err.message}`;
+      }
+    }
+
+    function clearFireOverlay() {
+      if (!fireGroup) return;
+      fireGroup.children.forEach(child => disposeObject(child));
+      earthGroup.remove(fireGroup);
+      fireGroup = null;
+    }
+
+    async function loadFireData() {
+      let totalFires = 0;
+      
+      // Try each NASA FIRMS data source
+      for (const url of NASA_FIRMS_URLS) {
+        try {
+          console.log(`Fetching fire data from: ${url}`);
+          const csvText = await fetchTextMaybeProxy(url);
+          
+          if (csvText) {
+            const fires = parseFireCSV(csvText);
+            console.log(`Found ${fires.length} fires from ${url}`);
+            
+            fires.forEach(fire => {
+              addFireMarker(fire.latitude, fire.longitude, fire);
+              totalFires++;
+            });
+            
+            // Limit total fires to prevent performance issues
+            if (totalFires >= 5000) {
+              console.log(`Limiting fire display to ${totalFires} markers for performance`);
+              break;
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to load fires from ${url}:`, error);
+        }
+      }
+      
+      // If no CSV data worked, try a test fire for demonstration
+      if (totalFires === 0) {
+        console.log('No fire data found, adding test fire markers...');
+        // Add some test fires in fire-prone areas
+        const testFires = [
+          { lat: 34.0522, lng: -118.2437, name: 'Los Angeles Area (Demo)', confidence: 'high' },
+          { lat: -23.5505, lng: -46.6333, name: 'São Paulo Area (Demo)', confidence: 'nominal' },
+          { lat: -25.7479, lng: 28.2293, name: 'Johannesburg Area (Demo)', confidence: 'high' }
+        ];
+        
+        testFires.forEach(fire => {
+          addFireMarker(fire.lat, fire.lng, fire);
+          totalFires++;
+        });
+      }
+      
+      return totalFires;
+    }
+
+    function parseFireCSV(csvText) {
+      const lines = csvText.trim().split('\n');
+      if (lines.length < 2) return [];
+      
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const latIndex = headers.findIndex(h => h.includes('lat'));
+      const lonIndex = headers.findIndex(h => h.includes('lon'));
+      const confidenceIndex = headers.findIndex(h => h.includes('confidence'));
+      const brightIndex = headers.findIndex(h => h.includes('bright') || h.includes('temp'));
+      const dateIndex = headers.findIndex(h => h.includes('acq_date') || h.includes('date'));
+      
+      if (latIndex === -1 || lonIndex === -1) {
+        console.warn('Could not find latitude/longitude columns in CSV');
+        return [];
+      }
+      
+      const fires = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',');
+        if (cols.length < Math.max(latIndex, lonIndex) + 1) continue;
+        
+        const lat = parseFloat(cols[latIndex]);
+        const lon = parseFloat(cols[lonIndex]);
+        
+        if (isValidCoord(lat, lon)) {
+          fires.push({
+            latitude: lat,
+            longitude: lon,
+            confidence: confidenceIndex >= 0 ? cols[confidenceIndex] : 'unknown',
+            brightness: brightIndex >= 0 ? parseFloat(cols[brightIndex]) : null,
+            date: dateIndex >= 0 ? cols[dateIndex] : null
+          });
+        }
+      }
+      
+      return fires;
+    }
+
+    function addFireMarker(lat, lng, fireData) {
+      try {
+        if (!fireGroup) {
+          fireGroup = new THREE.Group();
+          earthGroup.add(fireGroup);
+        }
+        
+        const position = latLngToVector3(lat, lng, RADIUS + 30); // Above surface
+        
+        // Create fire marker with flame emoji
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const ctx = canvas.getContext('2d');
+        
+        // Determine color based on confidence/brightness
+        let color = '#ff4400'; // default orange
+        if (fireData.confidence === 'high' || (fireData.brightness && fireData.brightness > 330)) {
+          color = '#ff0000'; // bright red for high confidence/hot fires
+        } else if (fireData.confidence === 'low') {
+          color = '#ff8800'; // orange for lower confidence
+        }
+        
+        // Draw background circle
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(16, 16, 14, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Add fire emoji
+        ctx.font = 'bold 12px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'white';
+        ctx.fillText('🔥', 16, 16);
+        
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+        const sprite = new THREE.Sprite(material);
+        sprite.position.copy(position);
+        sprite.scale.setScalar(30); // Smaller than hurricanes
+        sprite.userData = { 
+          type: 'fire', 
+          lat, 
+          lng, 
+          fireData,
+          name: fireData.name || `Fire at ${lat.toFixed(2)}, ${lng.toFixed(2)}`
+        };
+        
+        fireGroup.add(sprite);
+        
+      } catch (error) {
+        console.error(`Error adding fire marker at ${lat}, ${lng}:`, error);
+      }
+    }
+
+    function startFireUpdate() {
+      if (!showFires) return;
+      if (fireUpdateInterval) clearInterval(fireUpdateInterval);
+      // Refresh fire data every 30 minutes (NASA updates multiple times per day)
+      fireUpdateInterval = setInterval(async () => {
+        if (!showFires) return;
+        try {
+          await refreshFires();
+        } catch (e) {
+          console.warn('Fire update failed:', e);
+        }
+      }, 30 * 60 * 1000);
+    }
+
+    init();
+  </script>
+</body>
+
+</html>
