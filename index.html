@@ -622,7 +622,7 @@
           <div class="control-section-content">
             <button class="control-button" onclick="toggleTectonicPlates()">
               <span><span class="icon">🧨</span>Tectonic Plate Boundaries</span>
-              <span class="badge" id="plates-badge">OFF</span>
+              <span class="badge" id="plates-badge">ON</span>
             </button>
             <button class="control-button" onclick="refreshTectonicPlates()">
               <span><span class="icon">🔄</span>Refresh Plates</span>
@@ -630,7 +630,7 @@
 
             <button class="control-button" onclick="toggleHurricanes()">
               <span><span class="icon">🌀</span>Hurricane Alerts</span>
-              <span class="badge" id="hurricane-badge">OFF</span>
+              <span class="badge" id="hurricane-badge">ON</span>
             </button>
             <button class="control-button" onclick="refreshHurricanes()">
               <span><span class="icon">🔄</span>Refresh Alerts</span>
@@ -646,7 +646,7 @@
 
             <button class="control-button" onclick="toggleWeather()">
               <span><span class="icon">🌤️</span>Weather Stations</span>
-              <span class="badge" id="weather-badge">OFF</span>
+              <span class="badge" id="weather-badge">ON</span>
             </button>
             <button class="control-button" onclick="refreshWeather()">
               <span><span class="icon">🔄</span>Refresh Weather</span>
@@ -783,12 +783,12 @@
     let rocketLaunching = false;
     let showRocket = true;
     // Plates overlay state
-    let showPlates = false;
+    let showPlates = true; // Enable tectonic plates by default
     let plateGroup = null;    // THREE.Group for plate boundary lines
     let plateGeoJson = null;  // cache for GeoJSON
 
     // Hurricanes overlay state
-    let showHurricanes = false;
+    let showHurricanes = true; // Enable hurricane alerts by default
     let hurricaneGroup = null;    // THREE.Group for hurricane alert polygons/lines
     let hurricaneGeoJson = null;  // cache
 
@@ -798,7 +798,7 @@
     let fireData = null;          // cache for fire data
 
     // Weather overlay state (Environment Canada)
-    let showWeather = false;
+    let showWeather = true; // Enable weather stations by default
     let weatherGroup = null;      // THREE.Group for weather station markers
     let weatherData = null;       // cache for weather data
 
@@ -1093,14 +1093,31 @@
       loadISSData();
       startISSUpdate();
 
-      loadHurricanes();
-      startHurricaneUpdate();
+      // Initialize hurricanes
+      if (showHurricanes) {
+        console.log('Initializing hurricane alerts...');
+        ensureHurricaneOverlay();
+        startHurricaneUpdate();
+      }
+
+      // Initialize tectonic plates
+      if (showPlates) {
+        console.log('Initializing tectonic plates...');
+        ensurePlateOverlay();
+      }
 
       // Initialize fire tracking
       if (showFires) {
         console.log('Initializing fire overlay...');
         ensureFireOverlay();
         startFireUpdate();
+      }
+
+      // Initialize weather stations
+      if (showWeather) {
+        console.log('Initializing weather stations...');
+        ensureWeatherOverlay();
+        startWeatherUpdate();
       }
 
       // Create rocket after a short delay to not block globe creation
